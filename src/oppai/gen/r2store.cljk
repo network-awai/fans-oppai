@@ -1,0 +1,100 @@
+(ns oppai.gen.r2store
+  "R2-backed store that replaces the interim Workers KV namespace (OPPAI_KV)
+  and the D1 feedback database (OPPAI_DB) — ADR-2609132007: awai network は
+  D1 / Durable Object / Workers KV を使わない。R2 is a provider
+  (content-addressed-capable object store), not a single-vendor state store,
+  so it is out of the policy's scope.
+
+  What KV gave us and what R2 gives instead:
+  - `expirationTtl` → the record itself carries `:expires-at` (epoch ms) and
+    every read checks it (`expired?`); the cron sweep deletes expired
+    objects. Reads of an expired object return nil, exactly like a KV key
+    past its TTL.
+  - `get` with `\"json\"` → `get-json` reads the object text and parses.
+  - `list` → `list-keys` over an R2 prefix (lexicographic, same as KV).
+
+  One nuance that is NOT reproduced: KV's expiry deletes lazily server-side
+  with no reader involvement. Here the sweep is explicit (`sweep!`, driven by
+  the existing cron), and an object that survived to its expiry second is
+  served as absent by the read path even before the sweep reaches it."
+  (:require [goog.object :as gobj]
+            [kotoba.lang.text :as str]))
+
+(defn configured? [env]
+  (boolean (gobj/get env "OPPAI_R2")))
+
+(defn- r2 [env] (gobj/get env "OPPAI_R2"))
+
+(defn expired?
+  "A record without :expires-at is always live (KV rows without TTL were
+  legal); a record with one is live only while `now` is before it."
+  [record now]
+  (boolean (and (map? record)
+                (integer? (:expires-at record))
+                (<= (:expires-at record) now))))
+
+(defn- parse
+  "Object → parsed record or nil. Mirrors `kv-get-json`: absent key, empty
+  body and unparseable bytes are all `nothing to go on`."
+  [^js obj now]
+  (when obj
+    (-> (.text obj)
+        (.then (fn [raw]
+                 (when (and raw (pos? (.-length raw)))
+                   (let [v (try (js->clj (js/JSON.parse raw) :keywordize-keys true)
+                                (catch :default _ nil))]
+                     (when (and v (not (expired? v now))) v))))))))
+
+(defn get-json
+  "Key → Promise<parsed record or nil>. Expired records read as absent."
+  [env k & [now]]
+  (let [now (or now (.now js/Date))]
+    (if-not (r2 env)
+      (js/Promise.resolve nil)
+      (-> (.get (r2 env) k)
+          (.then (fn [^js obj] (parse obj now)))))))
+
+(defn put-json!
+  "Write `record` under `k`. TTL is expressed INSIDE the record as
+  :expires-at (epoch ms) when `ttl-s` is given — the KV expiry contract,
+  moved into the payload. Returns a promise of the record."
+  [env k record & [ttl-s]]
+  (let [record (cond-> record
+                 ttl-s (assoc :expires-at (+ (.now js/Date) (* ttl-s 1000))))]
+    (-> (.put (r2 env) k (js/JSON.stringify (clj->js record)))
+        (.then (fn [_] record)))))
+
+(defn delete!
+  [env k]
+  (if-not (r2 env)
+    (js/Promise.resolve nil)
+    (.delete (r2 env) k)))
+
+(defn list-keys
+  "All object keys under `prefix`, as a Promise of a vector of strings.
+  R2 list() is lexicographic, same as KV's."
+  [env prefix]
+  (if-not (r2 env)
+    (js/Promise.resolve [])
+    (-> (.list (r2 env) #js {:prefix prefix})
+        (.then (fn [^js listing]
+                 (mapv #(.-key %) (aget listing "objects")))))))
+
+(defn sweep!
+  "Delete every object under `prefix` whose record has expired. Returns a
+  promise of the number of objects deleted. Driven by the existing cron."
+  [env prefix now]
+  (let [now (or now (.now js/Date))]
+    (-> (list-keys env prefix)
+        (.then (fn [ks]
+                 (js/Promise.all
+                  (into-array
+                   (map (fn [k]
+                          (-> (get-json env k now)
+                              (.then (fn [v]
+                                       (when (nil? v)
+                                         ;; nil = absent OR expired; only a key
+                                         ;; that still lists but reads absent can
+                                         ;; be expired, so delete it.
+                                         (delete! env k))))))
+                        ks))))))))

@@ -35,6 +35,7 @@
             [oppai.gen.guard :as guard]
             [oppai.gen.billing :as billing]
             [oppai.gen.feedback :as feedback]
+            [oppai.gen.r2store :as store]
             [goog.object :as gobj]))
 
 (def ^:private chat-upstream "https://api.murakumo.cloud/v1/chat/completions")
@@ -213,20 +214,22 @@
                                    #js {:status (.-status resp) :headers headers}))))
           (.catch (fn [e] (error-response "upstream_error" (str e) 502)))))))
 
-;; ---- kv / cookies -------------------------------------------------------------
+;; ---- store / cookies ------------------------------------------------------------
 
-(defn- kv [env] (gobj/get env "OPPAI_KV"))
+;; The store was Workers KV (OPPAI_KV) — ADR-2609132007 bans KV across awai
+;; network, so the face ceremony now lives in R2 (OPPAI_R2, via
+;; oppai.gen.r2store). TTL moved inside the record as :expires-at; reads of
+;; expired records answer nil exactly like a KV key past its expiry.
+
+(defn- kv [env] (gobj/get env "OPPAI_R2"))
 
 (defn- kv-get-json [env k]
-  (if-let [store (kv env)]
-    (-> (.get store k "json")
-        (.then (fn [v] (when v (js->clj v :keywordize-keys true)))))
-    (js/Promise.resolve nil)))
+  (store/get-json env k))
 
 (defn- kv-put-json! [env k v ttl-s]
-  (.put (kv env) k (js/JSON.stringify (clj->js v)) #js {:expirationTtl ttl-s}))
+  (store/put-json! env k v ttl-s))
 
-(defn- kv-delete! [env k] (.delete (kv env) k))
+(defn- kv-delete! [env k] (store/delete! env k))
 
 (defn- random-hex [n-bytes]
   (let [a (js/Uint8Array. n-bytes)]
@@ -251,7 +254,7 @@
                                    "set-cookie" set-cookie}}))
 
 (defn- without-kv []
-  (error-response "not_configured" "顔の登録はこのデプロイでは未設定です (OPPAI_KV)" 503))
+  (error-response "not_configured" "顔の登録はこのデプロイでは未設定です (OPPAI_R2)" 503))
 
 ;; ---- face ceremony --------------------------------------------------------------
 
@@ -499,5 +502,7 @@
       (.catch (fn [_] (error-response "internal_error" "処理を完了できませんでした。時間をおいて再試行してください。" 500)))
       (.then (fn [response] (feedback/observe! request env ctx response)))))
 
+(defn- run-cleanup! [env] (feedback/cleanup! env))
+
 (def default (clj->js {:fetch fetch-handler
-                      :scheduled (fn [_ env ctx] (.waitUntil ctx (feedback/cleanup! env)))}))
+                      :scheduled (fn [_ env ctx] (.waitUntil ctx (run-cleanup! env)))}))
