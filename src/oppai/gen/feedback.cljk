@@ -1,11 +1,26 @@
 (ns oppai.gen.feedback
-  "Private, bounded support inbox. Never store request bodies, prompts, IPs or credentials in error logs."
-  (:require [goog.object :as gobj]
-            [kotoba.lang.text :as str]))
+  "Private, bounded support inbox. Never store request bodies, prompts, IPs or credentials in error logs.
 
-(defn statement [env sql & args]
-  (let [prepared (.prepare (gobj/get env "OPPAI_DB") sql)]
-    (.apply (.-bind prepared) prepared (to-array args))))
+  The store was D1 (OPPAI_DB) — ADR-2609132007 bans D1 across awai network, so
+  the three tables moved to R2 objects (OPPAI_R2):
+    feedback/{id}    one object per message (the old `feedback` table)
+    feedback-limits/{bucket}   one object per daily bucket (old `feedback_limits`)
+    site-errors/{id} one object per observed 4xx/5xx (old `site_errors`)
+  The bounded-inbox property is kept by a count key (feedback-count) checked
+  and, on success, incremented on write — the 10000 row ceiling becomes a
+  10000 object ceiling. The daily rate limit is a read-modify-write on one
+  object per bucket; like the old `ON CONFLICT … WHERE used<10` this is not
+  atomic across isolates, so a burst may accept slightly more than 10 — the
+  same softness the D1 version already had between statements."
+  (:require [goog.object :as gobj]
+            [kotoba.lang.text :as str]
+            [oppai.gen.r2store :as store]))
+
+(def ^:private feedback-prefix "feedback/")
+(def ^:private limits-prefix "feedback-limits/")
+(def ^:private errors-prefix "site-errors/")
+(def ^:private count-key "feedback-count")
+(def ^:private inbox-cap 10000)
 
 (defn json-response [body status]
   (js/Response. (js/JSON.stringify (clj->js body))
@@ -21,48 +36,156 @@
           (.then (fn [buffer] (apply str (map #(.padStart (.toString % 16) 2 "0") (js/Array.from (js/Uint8Array. buffer))))))))))
 
 (defn bounded-json! [request]
-  (let [reader (.getReader (.-body request)) total (atom 0) chunks (atom [])]
+  (let [reader (.getReader (.-body request))
+        total (atom 0)
+        chunks (atom [])]
     (letfn [(read! []
               (-> (.read reader)
                   (.then (fn [part]
                            (if (.-done part)
-                             (-> (.text (js/Blob. (clj->js @chunks))) (.then #(js/JSON.parse %)))
+                             (-> (.text (js/Blob. (clj->js @chunks)))
+                                 (.then #(js/JSON.parse %)))
                              (do (swap! total + (.-byteLength (.-value part)))
                                  (if (> @total 8192)
-                                   (do (.cancel reader) (throw (js/Error. "Body too large")))
-                                   (do (swap! chunks conj (.-value part)) (read!)))))))))]
+                                   (do (.cancel reader)
+                                       (throw (js/Error. "Body too large")))
+                                   (do (swap! chunks conj (.-value part))
+                                       (read!)))))))))]
       (read!))))
 
-(defn cleanup! [env]
-  (.batch (gobj/get env "OPPAI_DB")
-          #js [(statement env "DELETE FROM site_errors WHERE created_at < ?" (- (js/Date.now) (* 30 86400000)))
-               (statement env "DELETE FROM feedback WHERE created_at < ?" (- (js/Date.now) (* 90 86400000)))
-               (statement env "DELETE FROM feedback_limits WHERE expires_at < ?" (js/Date.now))]))
+(defn- increment-count!
+  "Read the inbox count object, refuse when at the cap, otherwise write
+  count+1. Returns a promise of true (accepted) / false (cap reached)."
+  [env]
+  (-> (store/get-json env count-key)
+      (.then (fn [v] (or (:count v) 0)))
+      (.then (fn [n]
+               (if (>= n inbox-cap)
+                 false
+                 (-> (store/put-json! env count-key {:count (inc n)})
+                     (.then (fn [_] true))))))))
 
-(defn submit! [request env]
+(defn- sweep-prefix!
+  "Delete every object under `prefix` whose record is absent (expired) or
+  created before `cutoff` (when given) or whose :expires-at has passed."
+  [env prefix cutoff now]
+  (let [kill (fn [k]
+               (-> (store/get-json env k now)
+                   (.then (fn [rec]
+                            (when (or (nil? rec)
+                                      (and cutoff (< (:created-at rec) cutoff))
+                                      (and (not cutoff) (some? (:expires-at rec)) (< (:expires-at rec) now)))
+                              (store/delete! env k))))))]
+    (-> (store/list-keys env prefix)
+        (.then (fn [ks]
+                 (js/Promise.all (into-array (mapv kill ks))))))))
+
+
+(defn cleanup!
+  "Delete feedback and site-error objects older than their retention window
+  (90 / 30 days) and limit buckets whose day has passed — the D1 DELETE
+  cron, moved to R2. Limit buckets carry their own expiry inside the record,
+  so their sweep keys on :expires-at instead of a cutoff."
+  [env]
+  (let [now (.now js/Date)
+        cutoff-feedback (- now (* 90 86400000))
+        cutoff-errors (- now (* 30 86400000))]
+    (-> (js/Promise.all
+         (into-array
+          [(sweep-prefix! env feedback-prefix cutoff-feedback now)
+           (sweep-prefix! env errors-prefix cutoff-errors now)
+           (sweep-prefix! env limits-prefix nil now)]))
+        (.then (fn [_] nil)))))
+
+(defn- valid-feedback?
+  [message category page error-id]
+  (and (string? message) (<= 1 (count (str/trim message)) 2000)
+       (contains? #{"bug" "idea" "comment"} category)
+       (string? page) (boolean (re-matches #"#[A-Za-z0-9/_-]{0,160}" page))
+       (or (nil? error-id) (= "" error-id)
+           (and (string? error-id) (boolean (re-matches #"[a-f0-9-]{36}" error-id))))))
+
+(defn- under-quota?
+  "Read the daily bucket object; under 10 means the message may pass. The
+  counter is bumped by reserve-quota! only after this — the bump and the
+  use are one read-modify-write, same softness as the D1 ON CONFLICT row."
+  [env network now]
+  (let [bucket (str limits-prefix (js/Math.floor (/ now 86400000)) ":" network)]
+    (-> (store/get-json env bucket now)
+        (.then (fn [rec] (< (or (:used rec) 0) 10))))))
+
+(defn- reserve-quota!
+  [env network now]
+  (let [bucket (str limits-prefix (js/Math.floor (/ now 86400000)) ":" network)
+        expires (+ now 172800000)]
+    (-> (store/get-json env bucket now)
+        (.then (fn [rec] (or (:used rec) 0)))
+        (.then (fn [used] (store/put-json! env bucket {:used (inc used) :expires-at expires}))))))
+
+(defn- persist-feedback!
+  [env {:keys [category message page error-id]} now]
+  (-> (increment-count! env)
+      (.then (fn [accepted]
+               (if-not accepted
+                 nil
+                 (let [id (.randomUUID js/crypto)]
+                   (store/put-json! env (str feedback-prefix id)
+                                    {:id id :created-at now :category category
+                                     :message (str/trim message) :page page :error-id error-id}
+                                    7776000)))))))
+
+(defn- stop! [body status]
+  "Early-return inside the submit! chain: throw a marker the final .catch
+  turns into the response. Keeps every then-step Promise-returning.
+  clj->js BEFORE stringify — js/JSON.stringify on a raw CLJS map emits the
+  internal shape, which from-early cannot read back."
+  (throw (js/Error. (js/JSON.stringify (clj->js {:early body :status status})))))
+
+(defn- submit-then!
+  "The bounded body → validate → quota → persist chain. Returns a promise
+  of the response."
+  [request env now]
   (-> (bounded-json! request)
       (.then (fn [raw]
                (let [message (gobj/get raw "message") category (gobj/get raw "category")
                      page (gobj/get raw "page") error-id (gobj/get raw "error_id")]
-                 (if-not (and (string? message) (<= 1 (count (str/trim message)) 2000)
-                              (contains? #{"bug" "idea" "comment"} category)
-                              (string? page) (boolean (re-matches #"#[A-Za-z0-9/_-]{0,160}" page))
-                              (or (nil? error-id) (= "" error-id) (and (string? error-id) (boolean (re-matches #"[a-f0-9-]{36}" error-id)))))
-                   (json-response {:error {:message "内容は1〜2000文字で入力してください。"}} 400)
+                 (if-not (valid-feedback? message category page error-id)
+                   (stop! {:error {:message "内容は1〜2000文字で入力してください。"}} 400)
                    (-> (network-id! request env)
                        (.then (fn [network]
-                                (.first (statement env
-                                  "INSERT INTO feedback_limits(bucket,used,expires_at) VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET used=used+1 WHERE used<10 RETURNING used"
-                                  (str (js/Math.floor (/ (js/Date.now) 86400000)) ":" network) (+ (js/Date.now) 172800000)))))
-                       (.then (fn [quota]
-                                (if-not quota (json-response {:error {:message "本日の送信上限です。明日お試しください。"}} 429)
-                                  (let [id (.randomUUID js/crypto)]
-                                    (-> (.run (statement env "INSERT INTO feedback(id,created_at,category,message,page,error_id) SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM feedback)<10000" id (js/Date.now) category (str/trim message) page error-id))
-                                        (.then (fn [result]
-                                                 (if (= 1 (gobj/getValueByKeys result "meta" "changes"))
-                                                   (json-response {:ok true :id id} 201)
-                                                   (json-response {:error {:message "受付が混雑しています。時間をおいてお試しください。"}} 503))))))))))))))
-      (.catch (fn [_] (json-response {:error {:message "送信できませんでした。入力を確認し、時間をおいて再試行してください。"}} 503)))))
+                                (-> (under-quota? env network now)
+                                    (.then (fn [ok]
+                                             (if-not ok
+                                               (stop! {:error {:message "本日の送信上限です。明日お試しください。"}} 429)
+                                               (-> (reserve-quota! env network now)
+                                                   (.then (fn [rec]
+                                                            (if-not rec
+                                                              (stop! {:error {:message "本日の送信上限です。明日お試しください。"}} 429)
+                                                              (-> (persist-feedback! env {:category category :message message :page page :error-id error-id} now)
+                                                                  (.then (fn [saved]
+                                                                           (if-not saved
+                                                                             (stop! {:error {:message "受付が混雑しています。時間をおいてお試しください。"}} 503)
+                                                                             (json-response {:ok true :id (:id saved)} 201))))))))))))))))))))))
+
+(defn- from-early [e]
+  "Turn a stop! marker (or an unexpected error) into a Response."
+  (let [early (try (js/JSON.parse (.-message e)) (catch :default _ nil))]
+    ;; NOTE: `(.-early …)` gets property-mangled under shadow-cljs advanced
+    ;; (reads the mangled name off a JSON.parse result — always undefined).
+    ;; JSON.parse output is an external object: read it with string keys.
+    (when-not (and early (aget early "early"))
+      (js/console.error "support_log_unavailable" e))
+    (if (and early (aget early "early") (aget early "status"))
+      (json-response (js->clj (aget early "early") :keywordize-keys true) (aget early "status"))
+      (json-response {:error {:message "送信できませんでした。入力を確認し、時間をおいて再試行してください。"}} 503))))
+
+(defn submit! [request env]
+  (let [now (.now js/Date)]
+    (js/Promise.
+     (fn [resolve reject]
+       (-> (submit-then! request env now)
+           (.then (fn [r] (resolve r)))
+           (.catch (fn [e] (resolve (from-early e)))))))))
 
 (defn observe! [request env ctx response]
   (if (or (< (.-status response) 400) (not (str/starts-with? (.-pathname (js/URL. (.-url request))) "/api/")))
@@ -76,7 +199,9 @@
                    (let [raw-code (or (gobj/getValueByKeys body "error" "code") (gobj/getValueByKeys body "error" "type"))
                          code (if (and (string? raw-code) (re-matches #"[a-z_]{1,64}" raw-code)) raw-code "request_failed")
                          persist (-> (js/Promise.resolve nil)
-                                     (.then (fn [_] (.run (statement env "INSERT INTO site_errors(id,created_at,route,code,status) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM site_errors)<10000" id (js/Date.now) route code status))))
+                                     (.then (fn [_] (store/put-json! env (str errors-prefix id)
+                                                                     {:id id :created-at (js/Date.now) :route route :code code :status status}
+                                                                     30)))
                                      (.catch (fn [_] (.error js/console "support_log_unavailable" id code status))))
                          headers (js/Headers. (.-headers response))]
                      (.waitUntil ctx persist)

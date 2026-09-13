@@ -1,24 +1,25 @@
 {
-  "name": "oppai-fans",
-  "private": true,
-  "description": "oppai.fans — R18 image/video generation on the murakumo Mac mini fleet, in the デジタル庁デザインシステム. Age-gated.",
-  "scripts": {
-    "cljk": "kbb --backend sci scripts/cljk_mirror.cljk",
-    "dev": "npm run cljk && shadow-cljs watch app",
-    "generate-site": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/generate_site.cljs",
-    "test": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/run_tests.cljs",
-    "e2e": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/verify-e2e.cljs",
-    "smoke:prod": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/prod-smoke.cljs",
-    "build": "npm run cljk && shadow-cljs release app worker && npm run generate-site",
-    "deploy": "npm run build && wrangler deploy",
-    "bot:tick": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/oppai_studio_tick.cljs"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "shadow-cljs": "^2.28.20",
-    "wrangler": "^4.20.0"
-  }
+ "name": "oppai-fans",
+ "private": true,
+ "description": "oppai.fans — R18 image/video generation on the murakumo Mac mini fleet, in the デジタル庁デザインシステム. Age-gated.",
+ "scripts": {
+  "cljk": "kbb --backend sci scripts/cljk_mirror.cljk",
+  "dev": "npm run cljk && shadow-cljs watch app",
+  "generate-site": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/generate_site.cljs",
+  "test": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/run_tests.cljs",
+  "e2e": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/verify-e2e.cljs",
+  "smoke:prod": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/prod-smoke.cljs",
+  "build": "npm run cljk && shadow-cljs release app worker && npm run generate-site",
+  "deploy": "npm run build && wrangler deploy",
+  "bot:tick": "npm run cljk && kbb --backend sci --classpath .cljk-build/src:.cljk-build/test:.cljk-build/scripts:../../kotoba-lang/jp-go-digital-design-system/src:../../kotoba-lang/html/src:../../kotoba-lang/css/src:../../kotoba-lang/text/src .cljk-build/scripts/oppai_studio_tick.cljs",
+  "test:worker": "npm run cljk && npx shadow-cljs release worker && node scripts/support_worker_test.mjs"
+ },
+ "dependencies": {
+  "react": "^18.2.0",
+  "react-dom": "^18.2.0"
+ },
+ "devDependencies": {
+  "shadow-cljs": "^2.28.20",
+  "wrangler": "^4.20.0"
+ }
 }

@@ -1,22 +1,38 @@
 (ns support-worker-test
+  "Support-worker integration test. The store was D1 (node:sqlite shim over
+  migrations/0001_feedback.sql); ADR-2609132007 moved it to R2, so this file
+  now runs against an in-memory R2 shim with the same semantics the worker
+  exercises: get/put/list/delete, with the expiry living inside the record
+  (:expires-at, checked by oppai.gen.r2store on read)."
   (:require ["node:assert/strict" :as assert]
-            ["node:sqlite" :refer [DatabaseSync]]
-            ["node:fs" :as fs]
             ["node:url" :as url]
             ["node:path" :as path]))
 
-(def db (DatabaseSync. ":memory:"))
-(.exec db (fs/readFileSync "migrations/0001_feedback.sql" "utf8"))
-(defn prepared [sql args]
-  #js {:bind (fn [& values] (prepared sql values))
-       :first (fn [] (js/Promise.resolve (.apply (.-get (.prepare db sql)) (.prepare db sql) (to-array args))))
-       :run (fn [] (let [r (.apply (.-run (.prepare db sql)) (.prepare db sql) (to-array args))]
-                    (js/Promise.resolve #js {:meta #js {:changes (js/Number (.-changes r))}})))})
-(def d1 #js {:prepare #(prepared % [])
-             :batch (fn [statements] (js/Promise.all (.map statements #(.run %))))})
+(def ^:private ^:dynamic *store* (atom {}))
+(defn r2-reset! [] (reset! *store* {}))
+(defn r2-objs []
+  (->> @*store*
+       (map (fn [[k v]] #js {:key k :value v}))
+       (into-array)))
+(def r2 #js {:get (fn [k]
+                    (js/Promise.resolve
+                     (when-let [v (get @*store* k)]
+                       #js {:text (fn [] (js/Promise.resolve v))})))
+             :put (fn [k v]
+                    (swap! *store* assoc k v)
+                    (js/Promise.resolve nil))
+             :delete (fn [k]
+                       (swap! *store* dissoc k)
+                       (js/Promise.resolve nil))
+             :list (fn [opts]
+                     (js/Promise.resolve
+                      #js {:objects (->> @*store*
+                                         (filter (fn [[k _]] (.startsWith k (.-prefix opts))))
+                                         (map (fn [[k _]] #js {:key k}))
+                                         (into-array))}))})
 (def pending (atom []))
 (def ctx #js {:waitUntil #(swap! pending conj %)})
-(def env #js {:OPPAI_DB d1 :OPPAI_PREVIEW_SPONSOR_TOKEN "test-only-secret"})
+(def env #js {:OPPAI_R2 r2 :OPPAI_PREVIEW_SPONSOR_TOKEN "test-only-secret"})
 (def sent (atom []))
 (set! (.-fetch js/globalThis)
       (fn [target init]
@@ -52,18 +68,36 @@
                             (assert/notEqual (get (first @sent) "x-preview-network") "forged")
                             (js/Promise.all (to-array @pending))))
                    (.then (fn [_]
-                            (assert/equal (.-n (.get (.prepare db "SELECT count(*) n FROM feedback"))) 11)
-                            (let [logs (js/JSON.stringify (.all (.prepare db "SELECT * FROM site_errors")))]
-                              (assert/equal (.includes logs "DO_NOT_LOG_PROMPT") false)
-                              (assert/equal (.includes logs "192.0.2.") false)
-                              (assert/equal (.includes logs "first visit") false)
-                              (assert/equal (.includes logs "daily_limit") true))
-                            (.exec db "UPDATE feedback SET created_at=0; UPDATE site_errors SET created_at=0")
+                            ;; persistence: 11 feedback objects + at least 1 site-error object
+                            (let [fb (count (filter #(.startsWith % "feedback/") (keys @*store*)))
+                                  errs (count (filter #(.startsWith % "site-errors/") (keys @*store*)))]
+                              (assert/equal fb 11)
+                              (assert/ok (pos? errs))
+                              ;; privacy: prompt, IP and message text never reach the store
+                              (let [blob (->> @*store*
+                                              (filter (fn [[k _]] (.startsWith k "site-errors/")))
+                                              (map (fn [[_ v]] v))
+                                              (into-array)
+                                              (js/JSON.stringify))]
+                                (assert/equal (.includes blob "DO_NOT_LOG_PROMPT") false)
+                                (assert/equal (.includes blob "192.0.2.") false)
+                                (assert/equal (.includes blob "first visit") false)
+                                (assert/equal (.includes blob "daily_limit") true))))
+                   (.then (fn [_]
+                            ;; retention: backdate every record, run the cron, expect empty
+                            (doseq [[k _] @*store*]
+                              (when-not (.startsWith k "feedback-count")
+                                (let [v (js/JSON.parse (get @*store* k))]
+                                  (when (.-created-at v) (set! (.-created-at v) 0))
+                                  (when (.-expires-at v) (set! (.-expires-at v) 0))
+                                  (swap! *store* assoc k (js/JSON.stringify v)))))
                             (.scheduled worker nil env ctx)
                             (js/Promise.all (to-array @pending))))
                    (.then (fn [_]
-                            (assert/equal (.-n (.get (.prepare db "SELECT count(*) n FROM feedback"))) 0)
-                            (assert/equal (.-n (.get (.prepare db "SELECT count(*) n FROM site_errors"))) 0)
+                            (let [fb (count (filter #(.startsWith % "feedback/") (keys @*store*)))
+                                  errs (count (filter #(.startsWith % "site-errors/") (keys @*store*)))]
+                              (assert/equal fb 0)
+                              (assert/equal errs 0))
                             (println "Support integration passed: persistence, limits, isolation, spoof rejection, privacy, retention, error IDs")
-                            (.close db)))))))
-    (.catch (fn [e] (.error js/console e) (js/process.exit 1))))
+                            (r2-reset!))))))))
+    (.catch (fn [e] (.error js/console e) (js/process.exit 1)))))
