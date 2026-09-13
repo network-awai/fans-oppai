@@ -27,16 +27,22 @@
     { "pattern": "oppai.fans", "custom_domain": true },
     { "pattern": "www.oppai.fans", "custom_domain": true }
   ],
-  // Face enrolments + challenge nonces (oppai.gen.guard). KV is the right
-  // plane for this: session-shaped, TTL-expiring, per-browser, and the
-  // record is the person's own frame — nothing durable, nothing shared,
-  // nothing to reconstruct (CLAUDE.md: KV for session/cache only, and an
-  // enrolment IS a session). Created 2026-09-11 with `wrangler kv namespace
-  // create OPPAI_KV`.
-  "kv_namespaces": [
-    { "binding": "OPPAI_KV", "id": "0b84f6a6905644c68f60eb693d15c6b1" }
+  // The state store was Workers KV (OPPAI_KV, face ceremony) + D1
+  // (OPPAI_DB, feedback inbox). ADR-2609132007 bans all three across awai
+  // network, so both moved to ONE R2 bucket (OPPAI_R2):
+  //   face ceremony  — key `challenge:{nonce}` / `face:{id}`, the KV
+  //                    expiryTtl moved inside the record as :expires-at and
+  //                    every read checks it (r2store/expired?)
+  //   feedback inbox — one object per message, bounded by a count object
+  //                    (feedback-count, cap 10000)
+  //   daily quota    — one object per bucket, read-modify-write (the same
+  //                    non-atomic softness the D1 version had)
+  //   site errors    — one object per observed 4xx/5xx
+  // The cron sweep deletes expired objects (old DELETE cron, moved to
+  // oppai.gen.feedback/cleanup! over R2 list+delete).
+  "r2_buckets": [
+    { "binding": "OPPAI_R2", "bucket_name": "oppai-fans-data" }
   ],
-  "d1_databases": [{"binding": "OPPAI_DB", "database_name": "oppai-feedback", "database_id": "5ade2f09-54d1-4bca-a182-1185bc39a47b", "migrations_dir": "migrations"}],
   "triggers": {"crons": ["17 * * * *"]},
   "observability": { "enabled": true }
 }
