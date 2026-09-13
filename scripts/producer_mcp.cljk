@@ -3,7 +3,11 @@
   (:require [producer-publish :as p] ["readline" :as rl]))
 (def ready (atom false))
 (def tool-list
-  [{:name "producer_list_posts" :description "List saved Producer receipts and their review/publication state."
+  [{:name "producer_audit_posts"
+    :description "Audit latest hourly posts: actual image SHA256 duplicates, catalog hash mismatches, identical prompts and repeated prompt phrases. Read-only local Git evidence, not visual similarity or live browser verification."
+    :inputSchema {:type "object" :properties {:limit {:type "integer" :minimum 1 :maximum 100 :default 20}} :additionalProperties false}
+    :annotations {:readOnlyHint true}}
+   {:name "producer_list_posts" :description "List saved Producer receipts and their review/publication state."
     :inputSchema {:type "object" :properties {} :additionalProperties false}
     :annotations {:readOnlyHint true}}
    {:name "producer_publish" :description "Commit, push, build and deploy one reviewed free-generation receipt to oppai.fans. Requires exact image hash and current deployment version. Returns deployed; verify the public page separately before marking published."
@@ -35,6 +39,7 @@
                        (try
                          (let [a (get-in m [:params :arguments])
                                result (case (get-in m [:params :name])
+                                        "producer_audit_posts" (p/audit! (or (.-OPPAI_REPO js/process.env) (.cwd js/process)) (if (contains? a :limit) (:limit a) 20))
                                         "producer_list_posts" (p/pending)
                                         "producer_verify_post" (p/verify! (or (.-OPPAI_REPO js/process.env) (.cwd js/process)) (:hour a))
                                         "producer_publish" (p/publish! (or (.-OPPAI_REPO js/process.env) (.cwd js/process))

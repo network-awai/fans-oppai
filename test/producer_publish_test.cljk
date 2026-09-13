@@ -27,7 +27,7 @@
         lines (.split (.trim out) "\n")]
     (is (= 2 (count lines)))
     (is (= "producer_publish" (get-in (js->clj (js/JSON.parse (aget lines 1)) :keywordize-keys true)
-                                          [:result :tools 1 :name])))))
+                                          [:result :tools 2 :name])))))
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
 (deftest verify-deployment
@@ -43,4 +43,16 @@
     (is (= "artifact_mismatch" (:status (check versions "wrong" catalog))))
     (is (= "artifact_mismatch" (:status (check versions digest "(def public-works [])"))))
     (is (= "artifact_mismatch" (:status (check versions digest (str "(def public-works " (pr-str [work work]) ")")))))))
+(deftest audit-duplicates-and-bias
+  (let [a {:id "a" :sha256 "same" :actual_sha256 "same" :prompt "portrait, daylight"}
+        b (assoc a :id "b" :sha256 "wrong")
+        c {:id "c" :sha256 "other" :actual_sha256 "other" :prompt "landscape, daylight"}
+        result (p/audit-summary [a b c])]
+    (is (= ["a" "b"] (get-in result [:exact_image_duplicates 0 :ids])))
+    (is (= ["b"] (:artifact_mismatches result)))
+    (is (= 2 (get-in result [:identical_prompts 0 :count])))
+    (is (= {:phrase "daylight" :count 3} (first (:repeated_prompt_phrases result))))
+    (is (false? (:visual_similarity_verified result)))
+    (is (empty? (:exact_image_duplicates (p/audit-summary []))))
+    (is (thrown? js/Error (p/audit! "." 101)))))
 (run-tests)

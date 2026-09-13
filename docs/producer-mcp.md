@@ -50,3 +50,18 @@ run producer_verify_post to report deployment/artifact evidence, and proceed
 with the next hour's free generation. Generated, submitting and uncertain
 receipts still require recovery to prevent duplicate requests. Never work around
 browser access controls. Free quota and uncertain-request limits still apply.
+
+## Audit duplicate posts and prompt bias
+
+Call `producer_audit_posts` with `{"limit":20}` (default 20, range 1–100).
+It reads the latest hourly Producer catalog entries and image bytes at one
+fixed local Git commit. Results include actual SHA256 duplicate groups, catalog
+hash mismatches, identical prompt groups, repeated prompt phrases with counts,
+and each post's title, profile, model, prompt and URL. Missing image artifacts
+fail the call rather than being counted as unique. The response identifies its
+commit and timestamp. This is read-only and does not generate or publish.
+
+Repeated phrases are evidence of prompt repetition, not a perceptual image
+similarity score. Live site caching, rendered cards and public image responses
+are not checked. Use `producer_verify_post` separately for deployment evidence.
+Restart/reconnect an already-running MCP client to discover the added tool.

@@ -146,3 +146,39 @@
                                 (command repo ["npx" "wrangler" "deployments" "list" "--json"]))
                                :keywordize-keys true)]
       (verification hour r deployments (sha image) catalog))))
+
+(defn audit-summary [posts]
+  (let [groups (fn [key] (->> posts (filter #(some? (key %))) (group-by key)
+                              (keep (fn [[value xs]] (when (> (count xs) 1)
+                                                      {:value value :count (count xs) :ids (mapv :id xs)})))
+                              (sort-by (juxt (comp - :count) :value)) vec))
+        phrases (->> posts (mapcat #(distinct (map (fn [s] (.trim s)) (.split (or (:prompt %) "") ","))))
+                     (remove empty?) frequencies
+                     (map (fn [[phrase n]] {:phrase phrase :count n}))
+                     (sort-by (juxt (comp - :count) :phrase)) (take 30) vec)]
+    {:post_count (count posts) :exact_image_duplicates (groups :actual_sha256)
+     :identical_prompts (groups :prompt) :repeated_prompt_phrases phrases
+     :artifact_mismatches (mapv :id (filter #(not= (:sha256 %) (:actual_sha256 %)) posts))
+     :posts posts :visual_similarity_verified false :browser_verified false
+     :public_image_fetch_verified false}))
+
+(defn audit! [repo limit]
+  (when-not (and (integer? limit) (<= 1 limit 100))
+    (throw (js/Error. "limit must be an integer from 1 to 100")))
+  (let [commit (.trim (command repo ["git" "rev-parse" "HEAD"]))
+        source (command repo ["git" "show" (str commit ":src/oppai/gen/catalog.cljk")])
+        start (.indexOf source "(def public-works")]
+    (when (< start 0) (throw (js/Error. "Catalog unavailable")))
+    (let [works (nth (reader/read-string (subs source start)) 2)
+          selected (->> works (filter #(re-matches #"producer-\d{8}T\d{2}Z" (or (:id %) "")))
+                        (sort-by :id) reverse (take limit))
+          posts (mapv (fn [w]
+                        (let [image (str "public/img/" (:id w) ".png")
+                              bytes (cp/execFileSync "git" (clj->js ["show" (str commit ":" image)])
+                                                    #js {:cwd repo :timeout 30000 :maxBuffer 16777216})]
+                          (assoc (select-keys w [:id :title :model :profile :prompt :sha256])
+                                 :actual_sha256 (sha bytes)
+                                 :url (str "https://oppai.fans/#post/" (:id w))))) selected)]
+      (assoc (audit-summary posts) :commit commit :checked_at (.toISOString (js/Date.))
+             :scope "Latest hourly catalog entries and image bytes at local Git commit; no live site or perceptual verification"
+             :limit limit))))
