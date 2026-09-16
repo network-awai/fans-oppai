@@ -1,0 +1,77 @@
+(ns oppai.gen.https
+  "HTTPS is required on oppai.fans (owner instruction 2026-09-16).
+
+  Measured that day: `http://oppai.fans/` and `http://www.oppai.fans/` both
+  answered 200 with the page and no Strict-Transport-Security header, while
+  murakumo.cloud (same owner, same edge) had answered 301 + HSTS since
+  2026-09-10. This namespace is that fix, ported from
+  cloud-murakumo.security-headers rather than reinvented.
+
+  Two halves, and both are needed:
+
+  - the REDIRECT makes the first visit safe. RFC 6797 says a UA records an
+    HSTS policy only from an HTTPS response, so however long the max-age, a
+    first visit over http is unprotected unless the server refuses to serve
+    it there.
+  - HSTS makes every later visit skip http entirely, so the redirect stops
+    being a round trip the browser has to make.
+
+  Behind Cloudflare the client's real scheme is in `cf-visitor`; `request.url`
+  can read as https because TLS terminated at the edge. Both are checked, and
+  either saying `http` is enough — a check that trusts only the URL passes
+  exactly the requests it exists to catch.
+
+  GET and HEAD get 301, which every client understands and caches. Anything
+  else gets 308, because 301 lets a client turn a POST into a GET and drop its
+  body, and every `/api/*` route on this host is a POST.
+
+  No preload directive: preload is a public, hard-to-undo commitment and is
+  not what was asked for."
+  (:require [kotoba.lang.text :as str]))
+
+(def hsts-value "max-age=31536000; includeSubDomains")
+
+(defn visitor-scheme
+  "The scheme Cloudflare saw the client use, from the `cf-visitor` header
+  (`{\"scheme\":\"http\"}`), or nil when absent or unparseable."
+  [cf-visitor]
+  (when (and (string? cf-visitor) (not (str/blank? cf-visitor)))
+    (try (let [v (.-scheme (js/JSON.parse cf-visitor))]
+           (when (string? v) v))
+         (catch :default _ nil))))
+
+(defn https-redirect
+  "The redirect a plain-HTTP request must get, or nil when it arrived over TLS.
+  Pure over strings: `url-str`, the raw `cf-visitor` header and the method."
+  [url-str cf-visitor method]
+  (let [url (js/URL. url-str)
+        insecure? (or (= "http:" (.-protocol url))
+                      (= "http" (visitor-scheme cf-visitor)))]
+    (when insecure?
+      (set! (.-protocol url) "https:")
+      {:status (if (contains? #{"GET" "HEAD"} (str method)) 301 308)
+       :location (.toString url)})))
+
+(defn redirect-response
+  "`https-redirect`'s value -> a Response, or nil. Carries HSTS too: a redirect
+  is the one response an http-only client will ever see from this host, and
+  the header is harmless there (a UA ignores HSTS on a non-TLS response)."
+  [redirect]
+  (when redirect
+    (js/Response. nil #js {:status (:status redirect)
+                           :headers #js {"location" (:location redirect)
+                                         "strict-transport-security" hsts-value
+                                         "cache-control" "public, max-age=3600"}})))
+
+(defn with-hsts
+  "A copy of `response` with Strict-Transport-Security set. Status, body stream
+  and every other header are preserved. nil passes through."
+  [^js response]
+  (if (nil? response)
+    response
+    (let [headers (js/Headers. (.-headers response))]
+      (.set headers "strict-transport-security" hsts-value)
+      (js/Response. (.-body response)
+                    #js {:status (.-status response)
+                         :statusText (.-statusText response)
+                         :headers headers}))))

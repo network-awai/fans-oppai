@@ -15,6 +15,7 @@
             [oppai.gen.fleet-test]
             [oppai.gen.gate-test]
             [oppai.gen.guard-test]
+            [oppai.gen.https-test]
             [oppai.gen.route-test]
             [oppai.gen.site-test]))
 
@@ -33,5 +34,6 @@
              'oppai.gen.fleet-test
              'oppai.gen.gate-test
              'oppai.gen.guard-test
+             'oppai.gen.https-test
              'oppai.gen.route-test
              'oppai.gen.site-test)
