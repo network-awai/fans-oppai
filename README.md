@@ -64,6 +64,13 @@
 | チャット | Worker `/api/chat` → `api.murakumo.cloud/v1/chat/completions` | ストリーミングなので天井に当たらない。実行タグ付けと濫用抑制を 1 箇所に置く |
 | 動画 | Worker `/api/generation`（`type: video`）→ 同上 | 署名付き capability token（`MURAKUMO_GENERATION_TOKEN`）が要る。鍵はブラウザに置かない。`input.image` に data URI を渡すと i2v（作品棚の「動画にする」） |
 
+**HTTPS 必須**（owner 指示 2026-09-16、`src/oppai/gen/https.cljk`）: 平文 http は Worker が
+route より前に 301（GET/HEAD）/ 308（それ以外）で https へ返し、配信した全応答に
+`Strict-Transport-Security: max-age=31536000; includeSubDomains` を付ける（preload は付けない）。
+`request.url` だけでなく `cf-visitor` も見る（edge で TLS 終端すると url は https に読める）。
+実測 2026-09-16 以前: `http://oppai.fans/` は 200 でページを返し HSTS も無かった。
+確認: `curl -sI http://oppai.fans/ | head -1` が `301`、`curl -sI https://oppai.fans/ | grep -i strict`。
+
 「作品」（`#works`）は**この端末の localStorage** にある棚で、公開ギャラリーでは
 ない。公開・共有・アカウント（SIWE + Passkey）・クレジット（x402/USDC）は
 次の段（superproject ADR-2609111130 の gap 表）。
