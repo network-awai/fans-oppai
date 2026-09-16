@@ -36,6 +36,7 @@
             [oppai.gen.billing :as billing]
             [oppai.gen.feedback :as feedback]
             [oppai.gen.r2store :as store]
+            [oppai.gen.https :as https]
             [goog.object :as gobj]))
 
 (def ^:private chat-upstream "https://api.murakumo.cloud/v1/chat/completions")
@@ -497,10 +498,19 @@
       (.fetch (gobj/get env "ASSETS") request))))
 
 (defn fetch-handler [request env ctx]
-  (-> (js/Promise.resolve nil)
-      (.then (fn [_] (handle-request request env ctx)))
-      (.catch (fn [_] (error-response "internal_error" "処理を完了できませんでした。時間をおいて再試行してください。" 500)))
-      (.then (fn [response] (feedback/observe! request env ctx response)))))
+  ;; HTTPS is required (oppai.gen.https). The redirect is decided before any
+  ;; route runs, so a plain-http POST to /api/* is bounced with 308 rather
+  ;; than served; every response that does get served carries HSTS.
+  (if-let [redirect (https/redirect-response
+                     (https/https-redirect (.-url request)
+                                           (.get (.-headers request) "cf-visitor")
+                                           (.-method request)))]
+    (js/Promise.resolve redirect)
+    (-> (js/Promise.resolve nil)
+        (.then (fn [_] (handle-request request env ctx)))
+        (.catch (fn [_] (error-response "internal_error" "処理を完了できませんでした。時間をおいて再試行してください。" 500)))
+        (.then (fn [response] (feedback/observe! request env ctx response)))
+        (.then https/with-hsts))))
 
 (defn- run-cleanup! [env] (feedback/cleanup! env))
 
