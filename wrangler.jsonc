@@ -21,7 +21,14 @@
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "none"
+    "not_found_handling": "none",
+    // The Worker runs before asset matching. Without this, a request for a
+    // path that IS a static asset (`/`, `/models`) is answered by the edge
+    // and never reaches oppai.gen.https -- measured 2026-09-16 after the
+    // first https deploy: `http://oppai.fans/` still 200, no HSTS, while
+    // `/api/*` and non-asset paths redirected. Same setting murakumo.cloud
+    // uses for the same reason.
+    "run_worker_first": true
   },
   "routes": [
     { "pattern": "oppai.fans", "custom_domain": true },
