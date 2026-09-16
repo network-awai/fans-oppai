@@ -2,7 +2,9 @@
   "Both directions of the HTTPS requirement, with the reason pinned: a test
   that only asserted 'some redirect' would pass on a www->apex redirect too."
   (:require [clojure.test :refer [deftest is]]
-            [oppai.gen.https :as https]))
+            [kotoba.lang.text :as str]
+            [oppai.gen.https :as https]
+            ["node:fs" :as fs]))
 
 (deftest plain-http-url-is-redirected
   (let [r (https/https-redirect "http://oppai.fans/#image" nil "GET")]
@@ -26,3 +28,14 @@
 (deftest hsts-is-one-year-with-subdomains-and-no-preload
   (is (= "max-age=31536000; includeSubDomains" https/hsts-value))
   (is (nil? (https/redirect-response nil))))
+
+(deftest the-worker-runs-before-asset-matching
+  ;; The redirect lives in the Worker, so the Worker must see every request.
+  ;; Without run_worker_first the edge answers `/` from the asset directory
+  ;; and http://oppai.fans/ stays 200 (measured 2026-09-16 after the first
+  ;; https deploy). Comments are stripped before parsing the jsonc.
+  (let [raw (fs/readFileSync "wrangler.jsonc" "utf8")
+        json (str/replace raw #"(?m)^\s*//.*$" "")
+        cfg (js->clj (js/JSON.parse json) :keywordize-keys true)]
+    (is (true? (get-in cfg [:assets :run_worker_first]))
+        "assets.run_worker_first must be true so http requests for asset paths reach the redirect")))
