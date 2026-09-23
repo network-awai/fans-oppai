@@ -181,8 +181,12 @@
 (defn choose [history]
   ;; Lowest successful count first; rotate ties by last attempt, then stable ID.
   ;; An outage doesn't count as a success or starve the remaining profiles.
+  ;; Only non-explicit profiles are eligible: the hourly automation publishes a
+  ;; non-explicit, fully-clothed gallery (docs/support.md contract), and explicit
+  ;; profiles would otherwise never earn a success and clog the front of this sort.
   (first
     (sort-by (fn [p]
                (let [xs (filter #(= (:id p) (:profile %)) history)]
                  [(count (filter #(#{"generated" "deployed" "published"} (:state %)) xs))
-                  (or (last (sort (keep :hour xs))) "") (:id p)])) profiles)))
+                  (or (last (sort (keep :hour xs))) "") (:id p)]))
+             (remove :explicit? profiles))))
