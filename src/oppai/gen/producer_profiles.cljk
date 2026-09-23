@@ -82,25 +82,101 @@
    {:id "tag-virtual-reality" :keyword "virtual-reality" :category "画風" :cue "illustrated character design, polished game concept art"}
    {:id "tag-voiced" :keyword "voiced" :category "画風" :cue "illustrated character design, polished game concept art"}
    {:id "tag-woman's-viewpoint" :keyword "woman's-viewpoint" :category "人物" :cue "original adult character portrait, expressive face, elegant everyday clothing"}
+
+   ;; ---- explicit profiles (owner-reviewed 2026-09-22) --------------------------
+   ;; Sourced from docs/data/accepted_tags.txt (the reviewed 202; the 11 dropped
+   ;; terms — loli, shota, rape, incest, bestiality, … — stay out). Scene labels
+   ;; follow what a tensorhub.art / streaming-site visitor looks for. Every cue
+   ;; names a fictional consenting adult, per the studio bot's :act precedent.
+   {:id "tag-ahegao" :keyword "ahegao" :category "表情" :explicit? true
+    :cue "adult woman, ahegao, rolling eyes, tongue out, drooling, heart-shaped pupils, orgasm face"}
+   {:id "tag-bukkake" :keyword "bukkake" :category "行為" :explicit? true
+    :cue "adult woman, bukkake, cum on face, cum on hair, multiple adult men, facial"}
+   {:id "tag-facial" :keyword "facial" :category "行為" :explicit? true
+    :cue "adult woman, cum on face, close-up, blissful expression, adult man"}
+   {:id "tag-paizuri" :keyword "paizuri" :category "行為" :explicit? true
+    :cue "adult woman with large breasts, paizuri, cum on breasts, adult man"}
+   {:id "tag-fellatio" :keyword "fellatio" :category "行為" :explicit? true
+    :cue "adult woman, fellatio, deepthroat, adult man, saliva, eye contact"}
+   {:id "tag-cowgirl" :keyword "cowgirl" :category "行為" :explicit? true
+    :cue "adult woman on top, cowgirl position, adult man, motion lines"}
+   {:id "tag-doggystyle" :keyword "doggystyle" :category "行為" :explicit? true
+    :cue "adult woman, sex from behind, doggystyle, adult man, ass grab"}
+   {:id "tag-missionary" :keyword "missionary" :category "行為" :explicit? true
+    :cue "adult woman, missionary, spread legs, adult man, creampie"}
+   {:id "tag-masturbation" :keyword "masturbation" :category "行為" :explicit? true
+    :cue "adult woman alone, masturbation, fingering, spread legs, blush"}
+   {:id "tag-creampie" :keyword "creampie" :category "行為" :explicit? true
+    :cue "adult woman, internal cumshot, creampie, adult man, satisfied expression"}
+   {:id "tag-titfuck" :keyword "titfuck" :category "行為" :explicit? true
+    :cue "adult woman with large breasts, titfuck, breast press, adult man, pov"}
+   {:id "tag-handjob" :keyword "handjob" :category "行為" :explicit? true
+    :cue "adult woman, handjob, adult man, teasing expression"}
+   {:id "tag-cunnilingus" :keyword "cunnilingus" :category "行為" :explicit? true
+    :cue "adult woman, cunnilingus, adult man, thighs quivering"}
+   {:id "tag-after-sex" :keyword "after-sex" :category "行為" :explicit? true
+    :cue "adult woman, after sex, cum drip, exhausted, lying on sheets"}
+   {:id "tag-group-sex" :keyword "group-sex" :category "行為" :explicit? true
+    :cue "adult woman, group sex with multiple adult men, consensual, overwhelmed expression"}
+   {:id "tag-lingerie-bed" :keyword "lingerie-bedroom" :category "衣装" :explicit? true
+    :cue "adult woman, lace lingerie, garter belt, stockings, on bed, seductive"}
+   {:id "tag-nude-bedroom" :keyword "nude-bedroom" :category "衣装" :explicit? true
+    :cue "adult woman, completely nude, bedroom, soft light, full body"}
+   {:id "tag-micro-bikini" :keyword "micro-bikini" :category "衣装" :explicit? true
+    :cue "adult woman, micro bikini, wet, beach, sand"}
+   {:id "tag-topless" :keyword "topless" :category "衣装" :explicit? true
+    :cue "adult woman, topless, bottomless, panties only, blush"}
+   {:id "tag-open-shirt" :keyword "open-shirt" :category "衣装" :explicit? true
+    :cue "adult woman, open shirt, no bra, cleavage, unbuttoned"}
+   {:id "tag-yukata-slip" :keyword "yukata-slip" :category "衣装" :explicit? true
+    :cue "adult woman, loose yukata slipping off shoulders, exposed breasts, onsen steam"}
+   {:id "tag-maid-lewd" :keyword "maid-lewd" :category "衣装" :explicit? true
+    :cue "adult woman, maid outfit, cleavage cutout, thighhighs, on bed"}
+   {:id "tag-onsen" :keyword "onsen" :category "情景" :explicit? true
+    :cue "adult woman, outdoor onsen, steam, wet hair, bare skin above water"}
+   {:id "tag-shower" :keyword "shower" :category "情景" :explicit? true
+    :cue "adult woman, shower, water drops on skin, tiles, wet hair"}
+   {:id "tag-love-hotel" :keyword "love-hotel" :category "情景" :explicit? true
+    :cue "adult woman, love hotel room, neon light, mirror, on bed"}
+   {:id "tag-office-night" :keyword "office-night" :category "情景" :explicit? true
+    :cue "adult office lady in her late 20s, desk at night, city lights, blouse unbuttoned"}
+   {:id "tag-pov" :keyword "pov" :category "構図" :explicit? true
+    :cue "pov from adult man's view, adult woman looking up at viewer, close-up"}
+   {:id "tag-x-ray" :keyword "x-ray" :category "構図" :explicit? true
+    :cue "adult woman, x-ray cross-section view, adult man, consensual"}
+   {:id "tag-temptation" :keyword "temptation" :category "表情" :explicit? true
+    :cue "adult woman, seductive smile, biting lip, eye contact, cleavage"}
+   {:id "tag-moaning" :keyword "moaning" :category "表情" :explicit? true
+    :cue "adult woman, moaning, blush, half-closed eyes, adult man"}
   ])
 
 (defn by-id [id] (some #(when (= id (:id %)) %) profiles))
 (defn prompt [profile n]
-  (str "masterpiece, best quality, fictional adult age 32, fully clothed, "
-       (:cue profile) ", "
-       (case (:keyword profile)
-         "blonde-hair" "blonde hair"
-         "sci-fi" "space station, futuristic city"
-         "fantasy" "enchanted forest, traveling cloak"
-         "dotpixel" "pixel art, visible pixel grid"
-         "outdoor" "botanical garden, trees"
-         "cosplay" "original space explorer costume"
-         "uniform" "adult professional wearing a tailored hotel uniform"
-         "stockings" "opaque stockings, knee length skirt, buttoned coat"
-         (str "theme: " (:keyword profile)))
-       ", " (nth ["waist up portrait, soft daylight" "full body, warm studio light"
-                   "three quarter portrait, cinematic evening light"] (mod n 3))
-       ", non-explicit, no nudity, no text"))
+  ;; Explicit profiles (owner-reviewed 2026-09-22) are consenting-fictional-adult
+  ;; scenes; the studio bot banks (:act in bots/oppai-studio.edn) set the
+  ;; vocabulary precedent. Everything else keeps the non-explicit floor.
+  (if (:explicit? profile)
+    (str "masterpiece, best quality, fictional adult age 32, adult woman, "
+         (:cue profile) ", "
+         (str "scene: " (:keyword profile))
+         ", " (nth ["full body, cinematic evening light" "close-up, face focus, depth of field"
+                    "pov, from above, looking at viewer"] (mod n 3))
+         ", rating:explicit, no text")
+    (str "masterpiece, best quality, fictional adult age 32, fully clothed, "
+         (:cue profile) ", "
+         (case (:keyword profile)
+           "blonde-hair" "blonde hair"
+           "sci-fi" "space station, futuristic city"
+           "fantasy" "enchanted forest, traveling cloak"
+           "dotpixel" "pixel art, visible pixel grid"
+           "outdoor" "botanical garden, trees"
+           "cosplay" "original space explorer costume"
+           "uniform" "adult professional wearing a tailored hotel uniform"
+           "stockings" "opaque stockings, knee length skirt, buttoned coat"
+           (str "theme: " (:keyword profile)))
+         ", " (nth ["waist up portrait, soft daylight" "full body, warm studio light"
+                    "three quarter portrait, cinematic evening light"] (mod n 3))
+         ", non-explicit, no nudity, no text")))
 
 (defn choose [history]
   ;; Lowest successful count first; rotate ties by last attempt, then stable ID.

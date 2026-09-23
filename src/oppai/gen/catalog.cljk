@@ -93,7 +93,27 @@
     :natural "a nude adult woman in a bedroom, soft morning light, tasteful, full body"}
    {:id :couple :label "カップル（成人）"
     :tags "1girl, 1boy, adults, couple, embrace, kiss, bedroom, rating:explicit"
-    :natural "an adult couple embracing in a bedroom, intimate, cinematic light"}])
+    :natural "an adult couple embracing in a bedroom, intimate, cinematic light"}
+   ;; tensorhub-style one-click scenes, owner-reviewed 2026-09-22 — consenting
+   ;; fictional adults only (the studio bot :act banks set the vocabulary).
+   {:id :ahegao :label "ahegao 集中"
+    :tags "1girl, adult woman, ahegao, rolling eyes, tongue out, heart-shaped pupils, rating:explicit"
+    :natural "an adult woman making an ahegao face, eyes rolled back, tongue out, mid-orgasm"}
+   {:id :facial :label "facial クローズアップ"
+    :tags "1girl, adult woman, cum on face, close-up, blissful expression, rating:explicit"
+    :natural "close-up on an adult woman's face, cum on her face, blissful expression"}
+   {:id :bukkake :label "bukkake"
+    :tags "1girl, adult woman, bukkake, cum on face, cum on breasts, multiple boys, rating:explicit"
+    :natural "an adult woman covered in cum on her face and breasts, multiple adult men"}
+   {:id :paizuri :label "paizuri POV"
+    :tags "1girl, adult woman, large breasts, paizuri, pov, 1boy, cum on breasts, rating:explicit"
+    :natural "a POV paizuri from an adult man's view, ending on her breasts"}
+   {:id :pov-cowgirl :label "POV cowgirl"
+    :tags "1girl, adult woman, pov, cowgirl position, 1boy, motion lines, rating:explicit"
+    :natural "a POV shot of an adult woman riding in cowgirl position"}
+   {:id :onsen-nude :label "露天風呂（成人）"
+    :tags "1girl, adult woman, nude, outdoor onsen, steam, wet hair, rating:explicit"
+    :natural "a nude adult woman in an outdoor onsen, steam rising, wet hair"}])
 
 (def styles {:realistic "写実" :anime "アニメ"})
 
