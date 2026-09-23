@@ -1,5 +1,6 @@
 (ns producer-profiles-test
   (:require [oppai.gen.producer-profiles :as p]
+            [oppai.gen.guard :as guard]
             [cljs.test :as t :refer [deftest is run-tests]]))
 (deftest balanced-rounds
   (let [n (count p/profiles)
@@ -16,8 +17,18 @@
     (is (not= first-id (:id (p/choose [{:profile first-id :state "generated" :hour "20260912T05Z"}]))))))
 (deftest reviewed-briefs
   (is (nil? (p/by-id "unknown")))
-  (is (every? #(re-find #"adult age 32, fully clothed" (p/prompt % 0)) p/profiles))
-  (is (every? #(< (count (p/prompt % 0)) 2000) p/profiles)))
+  (is (every? #(< (count (p/prompt % 0)) 2000) p/profiles))
+  ;; Non-explicit profiles keep the fully-clothed floor verbatim.
+  (is (every? #(re-find #"adult age 32, fully clothed" (p/prompt % 0))
+              (remove :explicit? p/profiles)))
+  ;; Explicit profiles (owner-reviewed 2026-09-22) name a fictional adult and
+  ;; the explicit rating; they must NOT carry the non-explicit floor (a
+  ;; contradiction a model would have to guess its way out of).
+  (is (every? #(re-find #"adult woman" (p/prompt % 0)) (filter :explicit? p/profiles)))
+  (is (every? #(re-find #"rating:explicit" (p/prompt % 0)) (filter :explicit? p/profiles)))
+  (is (not-any? #(re-find #"non-explicit" (p/prompt % 0)) (filter :explicit? p/profiles)))
+  ;; Every profile, explicit or not, clears the minor guard on its composed prompt.
+  (is (every? #(not (guard/minor? (p/prompt % 0))) p/profiles)))
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
 (run-tests)
