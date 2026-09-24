@@ -1,0 +1,129 @@
+# Host-local blocks (command_allowlist, onboarding, secrets, skills, terminal) are kept on the host and omitted here.
+moa:
+  presets:
+    default:
+      reference_models:
+        - provider: kotoba
+          model: qwen3.8-27b-whitehacker
+          enabled: true
+      degraded_reference_policy: loud
+      fanout: user_turn
+      aggregator:
+        provider: kotoba
+        model: qwen3.8-27b-whitehacker
+  reference_models:
+    - provider: kotoba
+      model: qwen3.8-27b-whitehacker
+      enabled: true
+  aggregator:
+    provider: kotoba
+    model: qwen3.8-27b-whitehacker
+  degraded_reference_policy: loud
+  fanout: user_turn
+  enabled: true
+model:
+  provider: kotoba
+
+  base_url: https://api.kotoba.cloud/v1
+  default: qwen3.8-27b-whitehacker
+
+  max_tokens: 16384
+  api_mode: chat_completions
+  key_env: KOTOBA_API_TOKEN
+  context_length: 262144
+providers:
+  murakumo:
+    base_url: https://api.murakumo.cloud/v1
+    api_mode: chat_completions
+    models:
+      nex-n2.5-mini-uncensored:
+        context_length: 65536
+        max_tokens: 8192
+    stale_timeout_seconds: 600
+    request_timeout_seconds: 900
+    extra_headers:
+      HTTP-Referer: https://itonami.cloud
+      X-OpenRouter-Title: Itonami By KotobaLabs
+      X-Title: Itonami By KotobaLabs
+    key_env: MURAKUMO_API_TOKEN
+  openrouter-free:
+    base_url: https://openrouter.ai/api/v1
+    api_mode: chat_completions
+    key_env: OPENROUTER_API_KEY
+    stale_timeout_seconds: 600
+    extra_headers:
+      HTTP-Referer: https://itonami.cloud
+      X-OpenRouter-Title: Itonami By KotobaLabs
+      X-Title: Itonami By KotobaLabs
+  custom:
+    models:
+      glm-5.3-flash-cybersecurity-w4a16:
+        stale_timeout_seconds: 2400
+        timeout_seconds: 2400
+      qwen3.8-flash-next-cybersecurity-nvfp4:
+        stale_timeout_seconds: 2000
+        timeout_seconds: 2000
+  kotoba:
+    base_url: https://api.kotoba.cloud/v1
+    api_mode: chat_completions
+    key_env: KOTOBA_API_TOKEN
+    stale_timeout_seconds: 600
+    request_timeout_seconds: 900
+    models:
+      qwen3.8-flash-next-whitehacker:
+        context_length: 131072
+fallback_providers:
+  - provider: openrouter-free
+    model: z-ai/glm-5.3-flash
+    base_url: https://openrouter.ai/api/v1
+agent:
+  max_turns: 500
+  run_budget_seconds: 1200
+openrouter:
+  response_cache: true
+  response_cache_ttl: 300
+auxiliary:
+  free_only: true
+  vision:
+    provider: auto
+    model: ''
+  compression:
+    provider: kotoba
+    model: qwen3.8-flash-next-whitehacker
+  skills_hub:
+    provider: auto
+    model: ''
+  approval:
+    provider: auto
+    model: ''
+  mcp:
+    provider: auto
+    model: ''
+  title_generation:
+    provider: auto
+    model: ''
+  triage_specifier:
+    provider: auto
+    model: ''
+  web_extract:
+    base_url: https://api.kotoba.cloud/v1
+    model: qwen3.8-flash-next-whitehacker
+    provider: kotoba
+plugins:
+  enabled: []
+cron:
+  max_parallel_jobs: 12
+  bot_chat_delivery_timeout_seconds: 900
+_config_version: 45
+mcp_servers:
+  oppai-producer:
+    command: /opt/homebrew/bin/kbb
+    args:
+      - --backend
+      - sci
+      - --classpath
+      - /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/scripts:/private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/src
+      - /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/scripts/producer_mcp.cljk
+    env:
+      OPPAI_REPO: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
+    timeout: 600
