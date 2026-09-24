@@ -15,7 +15,7 @@
   writing the pages — arrives through `install-io!` rather than a
   node module require, so this namespace names no host module and stays
   loadable in a browser build."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [css.core :as css]
             [html.core :as html]
             [jp-go-dds.dark :as dark]
