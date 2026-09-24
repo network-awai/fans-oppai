@@ -1,5 +1,5 @@
 (ns oppai.gen.db-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [oppai.gen.db :as db]
             [oppai.gen.fleet :as fleet]
             [oppai.gen.fleet-test :as ft]

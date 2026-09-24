@@ -1,5 +1,5 @@
 (ns oppai.gen.route-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [oppai.gen.route :as route]))
 
 (deftest every-view-has-an-address-and-round-trips

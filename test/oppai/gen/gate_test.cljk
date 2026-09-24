@@ -1,5 +1,5 @@
 (ns oppai.gen.gate-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [oppai.gen.db :as db]))
 
 (deftest fresh-visitor-is-not-confirmed
