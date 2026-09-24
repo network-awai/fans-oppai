@@ -4,7 +4,7 @@
   The profile under test is the real `bots/oppai-studio.edn`, read from disk:
   a test against a toy profile would pass while the shipped one names a
   minor. Reader-only under nbb (`fs`), no `install-io!` needed."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [cljs.reader :as reader]
             ["fs" :as fs]
             [kotoba.lang.text :as str]

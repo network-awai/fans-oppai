@@ -2,7 +2,7 @@
   "The R18 boundary and the consent boundary. Every negative here pins the
   literal reason (CLAUDE.md 8 問 #6): a refusal for a different reason is not
   the refusal this test claims."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.text :as str]
             [oppai.gen.guard :as guard]))
 
