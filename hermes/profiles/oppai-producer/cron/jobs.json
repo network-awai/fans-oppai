@@ -1,0 +1,25 @@
+{
+  "jobs": [
+    {
+      "base_url": null,
+      "deliver": "local",
+      "enabled": true,
+      "enabled_toolsets": null,
+      "id": "f07848c63ecb",
+      "model": "qwen3.8-27b-whitehacker",
+      "name": "oppai-producer-hourly",
+      "no_agent": false,
+      "prompt": "SOUL.md の hourly Producer 手順を実行する。共有receiptとMCP監査を確認し、今UTC時間帯に未送信の場合だけ無料生成を最大1件。実画像レビュー必須。良品だけ既存MCPで投稿・デプロイ照合する。未確認を成功と呼ばず、ブラウザー制限を回避しない。出力はローカルの日本語報告のみ。",
+      "provider": "kotoba",
+      "schedule": {
+        "kind": "cron",
+        "expr": "55 * * * *",
+        "display": "55 * * * *"
+      },
+      "script": null,
+      "skill": null,
+      "skills": [],
+      "workdir": "/private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai"
+    }
+  ]
+}
