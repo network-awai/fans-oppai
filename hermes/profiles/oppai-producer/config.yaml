@@ -22,15 +22,11 @@ moa:
   fanout: user_turn
   enabled: true
 model:
-  provider: kotoba
-
-  base_url: https://api.kotoba.cloud/v1
-  default: qwen3.8-27b-whitehacker
-
-  max_tokens: 16384
-  api_mode: chat_completions
-  key_env: KOTOBA_API_TOKEN
-  context_length: 262144
+  provider: murakumo
+  base_url: https://api.murakumo.cloud/v1
+  default: murakumo/free
+  max_tokens: 8192
+  context_length: 131072
 providers:
   murakumo:
     base_url: https://api.murakumo.cloud/v1

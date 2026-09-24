@@ -29,11 +29,11 @@
       "enabled": true,
       "enabled_toolsets": null,
       "id": "f288d9331267",
-      "model": "qwen3.8-27b-whitehacker",
+      "model": "murakumo/free",
       "name": "oppai-report",
       "no_agent": false,
       "prompt": "oppai-gen の日次報告。SOUL.md を読み、~/.hermes/profiles/oppai-gen/workspace/oppai-ledger.jsonl の最新行（前回 cron の oppai-probe 出力）とその前の行を diff して、最重要 finding を 1 件だけ報告する。測定は probe script が済ませているので、追加のネットワーク実測・credential 取得はしない。報告書式は SOUL.md どおり: 対象 corpus / 台帳 seq / findings（最重要 1 件）/ 提案（propose-only）/ 異常の有無。",
-      "provider": "kotoba",
+      "provider": "murakumo",
       "schedule": {
         "kind": "cron",
         "expr": "30 23 * * *",
