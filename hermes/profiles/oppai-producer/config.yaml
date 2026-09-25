@@ -110,7 +110,7 @@ plugins:
 cron:
   max_parallel_jobs: 12
   bot_chat_delivery_timeout_seconds: 900
-_config_version: 45
+_config_version: 46
 mcp_servers:
   oppai-producer:
     command: /opt/homebrew/bin/kbb
@@ -123,3 +123,7 @@ mcp_servers:
     env:
       OPPAI_REPO: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
     timeout: 600
+
+
+gateway:
+  cron_only: true
