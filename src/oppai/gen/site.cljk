@@ -22,7 +22,7 @@
             [oppai.gen.ui :as ui]
             [jp-go-dds.page :as dds-page]
             [jp-go-dds.tokens :as tokens]
-            #?(:clj [clojure.java.io :as io])))
+            #?(:clj [kotoba.io :as io])))
 
 ;; {:resource (fn [rel] text-or-nil) :file (fn [rel] text-or-nil)
 ;;  :write! (fn [rel text])}, installed by a host with no classpath and no
@@ -49,7 +49,7 @@
   [rel]
   (if-let [f (:file @io-hooks)]
     (f rel)
-    #?(:clj (let [f (io/file rel)] (when (.exists f) (slurp f)))
+    #?(:clj (let [f (io/file rel)] (when (io/exists? f) (slurp f)))
        :cljs nil)))
 
 (defn- write-file! [rel text]
