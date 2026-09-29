@@ -32,6 +32,9 @@ providers:
     base_url: https://api.murakumo.cloud/v1
     api_mode: chat_completions
     models:
+      mishima:
+        context_length: 131072
+        max_tokens: 1024
       nex-n2.5-mini-uncensored:
         context_length: 65536
         max_tokens: 8192
@@ -69,6 +72,9 @@ providers:
       qwen3.8-flash-next-whitehacker:
         context_length: 131072
 fallback_providers:
+  - provider: murakumo
+    model: mishima
+    base_url: https://api.murakumo.cloud/v1
   - provider: openrouter-free
     model: z-ai/glm-5.3-flash
     base_url: https://openrouter.ai/api/v1
@@ -110,7 +116,7 @@ plugins:
 cron:
   max_parallel_jobs: 12
   bot_chat_delivery_timeout_seconds: 900
-_config_version: 45
+_config_version: 46
 mcp_servers:
   oppai-producer:
     command: /opt/homebrew/bin/kbb
@@ -123,3 +129,7 @@ mcp_servers:
     env:
       OPPAI_REPO: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
     timeout: 600
+
+
+gateway:
+  cron_only: true

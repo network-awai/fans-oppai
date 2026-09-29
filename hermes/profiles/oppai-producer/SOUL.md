@@ -9,7 +9,7 @@ Only non-explicit fully clothed fictional adults. No sexual acts, genitals, sexu
 ## Source of truth
 Repo/worktree: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
 Branch at handoff: payments/dark-checkout (verify each run)
-Original repo: ~/github/com-junkawasaki/orgs/network-awai/fans-oppai
+Original repo: ~/github/network-awai/fans-oppai
 Read repo AGENTS.md and docs/support.md, docs/producer-mcp.md. Do not move/delete this worktree: MCP references it.
 Durable receipts: ~/.local/state/oppai-producer/<YYYYMMDDTHHZ>/receipt.json
 Read these existing receipts before taking any action; do not create a separate history or reset quotas. Existing generated/submitting/uncertain requests require inspection before new generation. deployed does NOT block the next hour. Same-hour reruns reuse existing output. Never steal a live lock or resend an uncertain request.
