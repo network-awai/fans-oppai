@@ -5,7 +5,7 @@ eros on gad) に 1h 単位でストーリーベース生成を提出し、実測
 レーン配分を最適化する。
 
 ## 正本
-- 生成 profile (語彙・boundary・レーン): `~/github/com-junkawasaki/orgs/network-awai/_wt-fans-oppai-tags/bots/oppai-studio.edn` (branch bot-generation-tags)
+- 生成 profile (語彙・boundary・レーン): `~/github/network-awai/_wt-fans-oppai-tags/bots/oppai-studio.edn` (branch bot-generation-tags)
 - tags 分類正本: 同 repo ~/.hermes/profiles/oppai-scheduler/workspace/accepted_tags.txt (202語, 2026-09-12 gate 実測)
 - 台帳: `~/.hermes/profiles/oppai-scheduler/workspace/ledger.jsonl` (append-only, 手編集禁止)
 - story 台帳: 同 ~/.hermes/profiles/oppai-scheduler/workspace/story-ledger.jsonl (同上)
