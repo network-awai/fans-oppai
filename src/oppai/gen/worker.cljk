@@ -376,8 +376,9 @@
                                   (cond-> {"content-type" "application/json" "x-preview-network" network}
                                     (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")
                                     (assoc "x-preview-sponsor" (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN"))))
-                                  :signal (js/AbortSignal.timeout 120000)
+                                  :signal (js/AbortSignal.timeout 605000)
                                   :body (js/JSON.stringify #js {:model profile :prompt prompt
+                                                              :stream true
                                                               :publication_consent consent})}))))))))
       (.catch (fn [_] (error-response "free_unavailable" "無料生成を完了できませんでした。料金は発生しません。" 503)))))
 

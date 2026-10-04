@@ -13,6 +13,11 @@ const ctx={waitUntil:(p)=>pending.push(Promise.resolve(p).catch(e=>console.error
 const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret'};
 // fetch stub: video preview returns a done job, everything else daily_limit 429
 globalThis.fetch = (target, init) => {
+  if (String(target).includes('/preview/generate')) {
+    assert.equal(JSON.parse(init.body).stream, true);
+    assert.equal(JSON.parse(init.body).model, 'waiREALMIX_v11');
+    assert.equal(init.headers['x-preview-sponsor'], 'test-only-secret');
+  }
   if (String(target).includes('/preview/video'))
     return Promise.resolve(new Response(JSON.stringify({status:'done',artifactUrl:'/api/v1/preview/video/jobs/9cd52d7c-8727-4f96-aa96-df891fe03caf/artifact'})));
   return Promise.resolve(new Response(JSON.stringify({error:{code:'daily_limit',message:'quota'}}), {status:429}));

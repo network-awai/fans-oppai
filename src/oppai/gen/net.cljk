@@ -271,8 +271,53 @@
 (defn fetch-payments! [callbacks]
   (fetch-json! "/api/payments" callbacks))
 
-(defn submit-free-image! [callbacks]
-  (fetch-json! "/api/free/image" (assoc callbacks :method "POST")))
+(defn- read-free-image-stream! [resp]
+  (let [reader (.getReader (.-body resp))
+        decoder (js/TextDecoder.)
+        buffer (atom "")
+        result (atom nil)]
+    (letfn [(pump! []
+              (-> (.read reader)
+                  (.then
+                   (fn [chunk]
+                     (swap! buffer str (if (.-done chunk) (.decode decoder)
+                                          (.decode decoder (.-value chunk) #js {:stream true})))
+                     (when (> (count @buffer) 16777216)
+                       (throw (js/Error. "生成結果が大きすぎます。")))
+                     (let [frames (vec (.split @buffer #"\r?\n\r?\n"))]
+                       (reset! buffer (last frames))
+                       (doseq [frame (butlast frames)]
+                         (let [lines (str/split frame #"\r?\n")
+                               event (some #(when (str/starts-with? % "event:")
+                                              (str/trim (subs % 6))) lines)
+                               data (str/join "\n" (map #(str/trim (subs % 5))
+                                                      (filter #(str/starts-with? % "data:") lines)))]
+                           (when (contains? #{"complete" "error"} event)
+                             (let [body (->clj (js/JSON.parse data))]
+                               (if (= "error" event)
+                                 (throw (js/Error. (error-text 503 body)))
+                                 (reset! result body)))))))
+                     (cond
+                       @result (do (.cancel reader) @result)
+                       (.-done chunk) (throw (js/Error. "画像生成の通信が途中で終了しました。再試行してください。"))
+                       :else (pump!))))))]
+      (-> (pump!) (.catch (fn [e] (.cancel reader) (throw e)))))))
+
+(defn submit-free-image! [{:keys [body on-ok on-error]}]
+  (-> (.fetch js/globalThis "/api/free/image"
+                #js {:method "POST" :headers #js {"content-type" "application/json"}
+                     :signal (js/AbortSignal.timeout 620000) :body (json-body body)})
+      (.then (fn [resp]
+               (if (and (.-ok resp)
+                        (str/includes? (or (.get (.-headers resp) "content-type") "") "text/event-stream"))
+                 (read-free-image-stream! resp)
+                 (-> (.text resp)
+                     (.then (fn [text]
+                              (let [parsed (try (->clj (js/JSON.parse text)) (catch :default _ nil))]
+                                (if (.-ok resp) parsed
+                                    (throw (js/Error. (error-text (.-status resp) parsed)))))))))))
+      (.then on-ok)
+      (.catch (fn [e] (on-error (or (.-message e) "無料画像生成を完了できませんでした。"))))))
 
 (defn submit-feedback! [callbacks]
   (fetch-json! "/api/feedback" (assoc callbacks :method "POST")))
