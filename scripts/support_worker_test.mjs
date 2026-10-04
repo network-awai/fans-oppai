@@ -61,6 +61,12 @@ try{
   await Promise.all(pending);
   console.log('POST-SWEEP keys:',[...store.keys()].join(','));assert.equal([...store.keys()].filter(k=>k.startsWith('feedback/')).length,0);
   assert.equal([...store.keys()].filter(k=>k.startsWith('site-errors/')).length,0);
+  store.set('heads/unrelated','preserve');
+  env.OPPAI_R2_PREFIX='oppai-fans/';
+  await call('/api/feedback',valid,'192.0.2.99',201);
+  assert.ok([...store.keys()].some(k=>k.startsWith('oppai-fans/feedback/')));
+  await worker.scheduled(null,env,ctx);await Promise.all(pending);
+  assert.equal(store.get('heads/unrelated'),'preserve');
   console.log('Support integration passed: persistence, limits, isolation, spoof rejection, privacy, retention, error IDs');
 }catch(e){console.error('FAIL:',e&&e.stack||e);process.exit(1)}
 process.exit(0);

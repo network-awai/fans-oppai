@@ -364,6 +364,13 @@
             :upstream generation-upstream}}
    200))
 
+(defn- image-network-id! [request env]
+  (let [ip (.get (.-headers request) "cf-connecting-ip") secret (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")]
+    (if-not (and (seq ip) (seq secret) (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))
+      (js/Promise.reject (js/Error. "Image admission unavailable"))
+      (-> (.digest (.-subtle js/crypto) "SHA-256" (.encode (js/TextEncoder.) (str secret ":oppai-image-network-v1:" ip)))
+          (.then (fn [bytes] (apply str (map #(.padStart (.toString % 16) 2 "0") (js/Array.from (js/Uint8Array. bytes))))))))))
+
 (defn- free-image! [request env]
   (-> (.json request)
       (.then (fn [raw]
@@ -375,7 +382,7 @@
                    (error-response "invalid_request" "公開前レビューへの同意と2000文字以内のプロンプトが必要です。" 400)
                    ;; No generation token and no billing identity on the free lane.
                    ;; The upstream retains its network/day quota and concurrency gate.
-                   (-> (feedback/network-id! request env)
+                   (-> (image-network-id! request env)
                        (.then (fn [network]
                          (js/fetch "https://api.murakumo.cloud/infer/image-jobs"
                              #js {:method "POST" :headers (clj->js
@@ -389,7 +396,7 @@
       (.catch (fn [_] (error-response "free_unavailable" "無料生成を完了できませんでした。料金は発生しません。" 503)))))
 
 (defn- free-image-status! [request env path]
-  (-> (feedback/network-id! request env)
+  (-> (image-network-id! request env)
       (.then (fn [network]
                (js/fetch (str "https://api.murakumo.cloud/infer/image-jobs/" (subs path (count "/api/free/image/jobs/")) "?network=" network)
                          #js {:headers (clj->js {"authorization" (str "Bearer " (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))})
