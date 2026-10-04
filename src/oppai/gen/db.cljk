@@ -346,7 +346,7 @@
 (defn free-image-result [db result]
   (let [url (:image result)
         id (or (get-in result [:artifact :id]) (new-id "free"))
-        model (if (= "waiREALMIX_v11" (:base_model result)) "waiREALMIX_v11" "animagine-xl-4.0")]
+        model (if (= "waiREALMIX_v11" (or (:base_model result) (:model result))) "waiREALMIX_v11" "animagine-xl-4.0")]
     (if-not (and (string? url) (str/starts-with? url "data:image/png;base64,iVBOR"))
       (image-failed db "生成結果を確認できませんでした。")
       (-> db

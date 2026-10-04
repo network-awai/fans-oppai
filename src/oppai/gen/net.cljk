@@ -53,8 +53,8 @@
        (when-let [id (:request_id body)] (str "　エラー番号: " id))))
 
 (defn- fetch-json!
-  [url {:keys [method body on-ok on-error]}]
-  (-> (js/fetch url (clj->js (cond-> {:method (or method "GET")}
+  [url {:keys [method body on-ok on-error on-http-error]}]
+  (-> (.fetch js/globalThis url (clj->js (cond-> {:method (or method "GET") :signal (js/AbortSignal.timeout 30000)}
                                body (assoc :headers {"content-type" "application/json"}
                                            :body (json-body body)))))
       (.then (fn [resp]
@@ -64,7 +64,8 @@
                                               (catch :default _ nil))]
                               (if (.-ok resp)
                                 (on-ok parsed)
-                                (on-error (error-text (.-status resp) parsed)))))))))
+                                (if on-http-error (on-http-error (.-status resp) (error-text (.-status resp) parsed))
+                                    (on-error (error-text (.-status resp) parsed))))))))))
       (.catch (fn [e] (on-error (str "ネットワークに到達できません: " e))))))
 
 ;; ---- fleet ------------------------------------------------------------------
@@ -222,11 +223,11 @@
 ;; ---- works ------------------------------------------------------------------
 
 (defn load-works []
-  (try (some-> (js/localStorage.getItem "oppai-works") js/JSON.parse (js->clj :keywordize-keys true))
+  (try (some-> (.getItem (.-localStorage js/globalThis) "oppai-works") js/JSON.parse (js->clj :keywordize-keys true))
        (catch :default _ nil)))
 
 (defn save-works! [works]
-  (try (js/localStorage.setItem "oppai-works" (js/JSON.stringify (clj->js works)))
+  (try (.setItem (.-localStorage js/globalThis) "oppai-works" (js/JSON.stringify (clj->js works)))
        (catch :default _ nil)))
 
 (defn fetch-data-uri!
@@ -271,8 +272,38 @@
 (defn fetch-payments! [callbacks]
   (fetch-json! "/api/payments" callbacks))
 
-(defn submit-free-image! [callbacks]
-  (fetch-json! "/api/free/image" (assoc callbacks :method "POST")))
+(def pending-image-key "oppai.pending-image.v1")
+(defn load-pending-image []
+  (try (when-let [text (.getItem (.-localStorage js/globalThis) pending-image-key)]
+         (->clj (js/JSON.parse text)))
+       (catch :default _ nil)))
+(defn submit-free-image! [{:keys [body on-ok on-error on-progress]}]
+  (let [pending (or body (load-pending-image))
+        pending (assoc pending :request_id (or (:request_id pending) (.randomUUID js/crypto)))
+        failures (atom 0)]
+    (.setItem (.-localStorage js/globalThis) pending-image-key (json-body pending))
+    (letfn [(retry! [f]
+              (swap! failures inc)
+              (when on-progress (on-progress {:status "reconnecting" :jobId (:request_id pending)}))
+              (.setTimeout js/globalThis f (min 30000 (+ 4000 (* 2000 @failures)))))
+            (result! [r]
+              (reset! failures 0)
+              (case (:status r)
+                "done" (do (.removeItem (.-localStorage js/globalThis) pending-image-key) (on-ok r))
+                "failed" (do (.removeItem (.-localStorage js/globalThis) pending-image-key) (on-error (error-text 503 r)))
+                (do (when on-progress (on-progress r)) (.setTimeout js/globalThis poll! 4000))))
+            (poll! []
+              (fetch-json! (str "/api/free/image/jobs/" (:request_id pending))
+                           {:on-ok result! :on-error (fn [_] (retry! poll!))}))
+            (submit! []
+              (fetch-json! "/api/free/image"
+                           {:method "POST" :body pending :on-ok result!
+                            :on-http-error (fn [status error]
+                                             (if (contains? #{400 401 409 429} status)
+                                               (do (.removeItem (.-localStorage js/globalThis) pending-image-key) (on-error error))
+                                               (retry! submit!)))
+                            :on-error (fn [_] (retry! submit!))}))]
+      (submit!))))
 
 (defn submit-feedback! [callbacks]
   (fetch-json! "/api/feedback" (assoc callbacks :method "POST")))

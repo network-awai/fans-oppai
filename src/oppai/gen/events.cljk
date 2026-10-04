@@ -20,7 +20,7 @@
                            (db/works-loaded works)
                            (db/navigate-fragment js/location.hash))
                  confirmed (db/confirm-age))
-           :fx (when confirmed [[:fleet/fetch nil] [:face/fetch nil] [:payments/fetch nil]])})))
+           :fx (when confirmed [[:fleet/fetch nil] [:face/fetch nil] [:payments/fetch nil] [:image/resume nil]])})))
 
      (rf/reg-event-fx
       :age/confirm
@@ -178,7 +178,16 @@
                 (fn [body]
                   (net/submit-free-image!
                    {:body body :on-ok #(rf/dispatch [:image/free-result %])
+                    :on-progress #(rf/dispatch [:image/free-progress %])
                     :on-error #(rf/dispatch [:image/failed %])})))
+     (rf/reg-event-db :image/free-progress
+                      (fn [db [_ progress]]
+                        (-> db (assoc-in [:image :status] :running) (assoc-in [:image :fleet-progress] progress))))
+     (rf/reg-fx :image/resume
+                (fn [_] (when (net/load-pending-image)
+                          (net/submit-free-image! {:on-ok #(rf/dispatch [:image/free-result %])
+                                                  :on-progress #(rf/dispatch [:image/free-progress %])
+                                                  :on-error #(rf/dispatch [:image/failed %])}))))
      (rf/reg-event-fx :image/free-result
                       (fn [{:keys [db]} [_ result]]
                         (let [next-db (db/free-image-result db result)]
