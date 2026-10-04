@@ -11,7 +11,7 @@
   "test/support_worker_test.cljk" ".cljs"
   "src/oppai/gen/feedback.cljk" ".cljs"
   "scripts/cljk_mirror.cljk" ".cljs"
-  "scripts/net_free_stream_test.cljk" ".cljs"
+  "scripts/net_free_jobs_test.cljk" ".cljs"
   "scripts/generate_site.cljk" ".cljs"
   "src/oppai/gen/catalog.cljk" ".cljc"
   "src/oppai/gen/guard.cljk" ".cljc"

@@ -109,8 +109,8 @@
   offering LTX as an image model is a ComfyUI error the visitor cannot read."
   [m]
   (let [models (->> (or (:models m) [])
-                    (map (fn [{:keys [id file]}] {:model-id (str id) :label (str id)
-                                                  :checkpoint file :nodes [] :queue 0 :exact? true}))
+                    (map (fn [{:keys [id file nodes ready replicas]}] {:model-id (str id) :label (str id)
+                                                  :checkpoint file :nodes (vec nodes) :ready ready :replicas replicas :queue 0 :exact? true}))
                     (remove #(re-find not-image-checkpoints (:model-id %)))
                     (sort-by :model-id)
                     vec)]

@@ -13,8 +13,8 @@ const ctx={waitUntil:(p)=>pending.push(Promise.resolve(p).catch(e=>console.error
 const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret'};
 // fetch stub: video preview returns a done job, everything else daily_limit 429
 globalThis.fetch = (target, init) => {
-  if (String(target).includes('/preview/generate')) {
-    assert.equal(JSON.parse(init.body).stream, true);
+  if (String(target).includes('/preview/image-jobs')) {
+    assert.match(JSON.parse(init.body).request_id, /^[a-f0-9-]{36}$/);
     assert.equal(JSON.parse(init.body).model, 'waiREALMIX_v11');
     assert.equal(init.headers['x-preview-sponsor'], 'test-only-secret');
   }
@@ -24,7 +24,7 @@ globalThis.fetch = (target, init) => {
 };
 const req=(path,body,ip)=>new Request('https://oppai.fans'+path,{method:'POST',headers:{origin:'https://oppai.fans','content-type':'application/json','cf-connecting-ip':ip},body:JSON.stringify(body)});
 const valid={category:'bug',message:'first visit quota issue',page:'#image',error_id:''};
-const free={model:'waiREALMIX_v11',prompt:'DO_NOT_LOG_PROMPT',publication_consent:'public-examples-v1'};
+const free={request_id:'329a7eb9-6f04-40c7-a32d-84c34cc8dba4',model:'waiREALMIX_v11',prompt:'DO_NOT_LOG_PROMPT',publication_consent:'public-examples-v1'};
 const call=async(path,body,ip,expected)=>{const r=await worker.fetch(req(path,body,ip),env,ctx);assert.equal(r.status,expected);return r.json()};
 try{
   const step=(s)=>console.log('STEP',s);

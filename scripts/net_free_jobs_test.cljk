@@ -1,0 +1,24 @@
+(ns net-free-jobs-test (:require [oppai.gen.net :as net]))
+(def store (atom {}))
+(js/Object.defineProperty js/globalThis "localStorage" #js {:configurable true :value #js {:getItem #(get @store %) :setItem #(swap! store assoc %1 %2) :removeItem #(swap! store dissoc %)}})
+(def original-timer js/setTimeout)
+(set! (.-setTimeout js/globalThis) (fn [f _] (original-timer (fn [] (f)) 1)))
+(def calls (atom []))
+(def image "data:image/png;base64,iVBORtest")
+(set! (.-fetch js/globalThis)
+      (fn [url init]
+        (swap! calls conj [url (.-method init) (.-body init)])
+        (js/Promise.resolve (js/Response. (js/JSON.stringify
+           (clj->js (if (= 1 (count @calls)) {:status "queued"} {:status "done" :image image}))) #js {:status 200}))))
+(original-timer (fn [] (println "Timed out" @calls @store) (js/process.exit 1)) 5000)
+(net/submit-free-image!
+ {:body {:prompt "teapot" :model "animagine-xl-4.0"}
+  :on-progress (fn [r] (when-not (net/load-pending-image) (do (println "STORE" @store) (throw (js/Error. "must persist pending id")))))
+  :on-error (fn [error] (println error) (js/process.exit 1))
+  :on-ok (fn [result]
+           (let [[_ method body] (first @calls) id (:request_id (js->clj (js/JSON.parse body) :keywordize-keys true))]
+             (when-not (and (= image (:image result)) (= "POST" method)
+                           (= (str "/api/free/image/jobs/" id) (ffirst (rest @calls)))
+                           (nil? (net/load-pending-image))) (throw (js/Error. "async job protocol failed")))
+             (println "Async image submit, persisted id, progress, poll and completion passed")
+             (js/process.exit 0)))})

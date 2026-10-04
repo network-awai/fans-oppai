@@ -170,7 +170,7 @@
         [:div {:class "oppai-form"}
          [:div {:class "oppai-note"}
           [:strong "基本の画像生成は無料"]
-          [:p "Animagine XL 4.0 / waiREALMIX_v11 · 768×768 · このサイト経由で各モデル1日24回（同じネットワーク単位）。混雑時は時間をおいてお試しください。"]]
+          [:p "Animagine XL 4.0（768×768）/ waiREALMIX_v11（528×528） · このサイト経由で各モデル1日24回（同じネットワーク単位）。混雑時は時間をおいてお試しください。"]]
          (dds-checkbox "image-free" "無料で生成する" free? busy?
                        #(rf/dispatch [:image/set :free? (.. % -target -checked)]))
          (when free?
@@ -224,7 +224,13 @@
           (when busy?
             [:span {:class "oppai-inline-status"}
              (ui/progress {:label "生成中"})
-             [:span (if (= :queued (:job/status job)) "順番待ち…" "1〜2分ほどかかります（初回はモデル読込で最大 6 分）")]])]
+             [:span (if free?
+                       (case (get-in image [:fleet-progress :status])
+                         "queued" "空いている生成ノードを待っています。"
+                         "reconnecting" "生成状況を確認しています。ページを開き直しても再開できます。"
+                         "running" (str "生成中 · " (get-in image [:fleet-progress :worker]) " · 数分〜20分ほどかかります。")
+                         "受付中…")
+                       (if (= :queued (:job/status job)) "順番待ち…" "生成中…"))]])]
          (fleet-note)]
         (when (and job busy?)
           [:div {:class "oppai-job"}
