@@ -183,8 +183,13 @@
      (rf/reg-event-db :image/free-progress
                       (fn [db [_ progress]]
                         (-> db (assoc-in [:image :status] :running) (assoc-in [:image :fleet-progress] progress))))
+     (rf/reg-event-db :image/free-restored
+                      (fn [db [_ pending]]
+                        (update db :image merge {:prompt (:prompt pending) :model (:model pending)
+                                                 :free? true :publication-consent? true :status :running})))
      (rf/reg-fx :image/resume
-                (fn [_] (when (net/load-pending-image)
+                (fn [_] (when-let [pending (net/load-pending-image)]
+                          (rf/dispatch [:image/free-restored pending])
                           (net/submit-free-image! {:on-ok #(rf/dispatch [:image/free-result %])
                                                   :on-progress #(rf/dispatch [:image/free-progress %])
                                                   :on-error #(rf/dispatch [:image/failed %])}))))
