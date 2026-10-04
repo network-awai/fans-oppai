@@ -1,5 +1,5 @@
 (ns oppai.gen.billing-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [oppai.gen.billing :as billing]))
 
 (def offer

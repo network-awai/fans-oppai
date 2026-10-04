@@ -1,7 +1,7 @@
 (ns oppai.gen.https-test
   "Both directions of the HTTPS requirement, with the reason pinned: a test
   that only asserted 'some redirect' would pass on a www->apex redirect too."
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [kotoba.lang.text :as str]
             [oppai.gen.https :as https]
             ["node:fs" :as fs]))

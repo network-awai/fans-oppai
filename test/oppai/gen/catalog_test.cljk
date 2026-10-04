@@ -1,5 +1,5 @@
 (ns oppai.gen.catalog-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.text :as str]
             [oppai.gen.catalog :as catalog]
             [oppai.gen.guard :as guard]))

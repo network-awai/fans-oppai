@@ -1,0 +1,48 @@
+{
+  "jobs": [
+    {
+      "base_url": null,
+      "context_from": null,
+      "deliver": "local",
+      "enabled": true,
+      "enabled_toolsets": null,
+      "id": "af18f62503f4",
+      "model": null,
+      "name": "oppai-story-hourly",
+      "no_agent": false,
+      "prompt": "oppai-scheduler story tick. scripts/sched_evidence.py を terminal で実行し、MEASURE 行を読んで 1 finding を報告する。測定は script が持ち、agent は再計算しない。前回 ledger (~/.hermes/profiles/oppai-scheduler/workspace/ledger.jsonl) との差分 (verdict / receipts_24h / wall 変化 / queue 飽和) を 1 件だけ取り上げ、対応案を propose として述べる。実行・publish はしない。",
+      "provider": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *",
+        "display": "0 * * * *"
+      },
+      "script": "sched_evidence.py",
+      "skill": null,
+      "skills": [],
+      "workdir": null
+    },
+    {
+      "base_url": null,
+      "context_from": null,
+      "deliver": "local",
+      "enabled": true,
+      "enabled_toolsets": null,
+      "id": "55e5ac578dda",
+      "model": null,
+      "name": "oppai-story-submit",
+      "no_agent": false,
+      "prompt": "story tick: script が fleet へ story 1 周を提出し ledger に記録する。出力の STORY/SUMMARY 行をそのまま報告するだけ。提案は propose のみ。",
+      "provider": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "10 * * * *",
+        "display": "10 * * * *"
+      },
+      "script": "story_tick.py",
+      "skill": null,
+      "skills": [],
+      "workdir": null
+    }
+  ]
+}
