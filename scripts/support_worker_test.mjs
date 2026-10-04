@@ -10,13 +10,15 @@ const r2 = {get:(k)=>Promise.resolve(store.has(k)?{text:()=>Promise.resolve(stor
  list:(o)=>Promise.resolve({objects:[...store.keys()].filter(k=>k.startsWith(o.prefix)).map(k=>({key:k}))})};
 const pending=[];
 const ctx={waitUntil:(p)=>pending.push(Promise.resolve(p).catch(e=>console.error('BG-ERR:',e&&e.message)))};
-const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret'};
+const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret',MURAKUMO_IMAGE_ADAPTER_TOKEN:'adapter-only'};
 // fetch stub: video preview returns a done job, everything else daily_limit 429
 globalThis.fetch = (target, init) => {
-  if (String(target).includes('/preview/image-jobs')) {
-    assert.match(JSON.parse(init.body).request_id, /^[a-f0-9-]{36}$/);
+  if (String(target).includes('/infer/image-jobs')) {
+    assert.match(JSON.parse(init.body).id, /^[a-f0-9-]{36}$/);
     assert.equal(JSON.parse(init.body).model, 'waiREALMIX_v11');
-    assert.equal(init.headers['x-preview-sponsor'], 'test-only-secret');
+    assert.equal(init.headers.authorization,'Bearer adapter-only');
+    assert.equal(JSON.parse(init.body).lane,'oppai');
+    assert.match(JSON.parse(init.body).network,/^[a-f0-9]{64}$/);
   }
   if (String(target).includes('/preview/video'))
     return Promise.resolve(new Response(JSON.stringify({status:'done',artifactUrl:'/api/v1/preview/video/jobs/9cd52d7c-8727-4f96-aa96-df891fe03caf/artifact'})));

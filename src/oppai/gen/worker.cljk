@@ -369,7 +369,7 @@
       (.then (fn [raw]
                (let [prompt (gobj/get raw "prompt") consent (gobj/get raw "publication_consent")
                      model (or (gobj/get raw "model") "animagine-xl-4.0")
-                     profile (get {"animagine-xl-4.0" "hokusai-preview" "waiREALMIX_v11" "waiREALMIX_v11"} model)]
+                     profile (get {"animagine-xl-4.0" "animagine-xl-4.0" "waiREALMIX_v11" "waiREALMIX_v11"} model)]
                  (if-not (and profile (string? prompt) (<= 1 (count (str/trim prompt)) 2000)
                               (= "public-examples-v1" consent))
                    (error-response "invalid_request" "公開前レビューへの同意と2000文字以内のプロンプトが必要です。" 400)
@@ -377,23 +377,22 @@
                    ;; The upstream retains its network/day quota and concurrency gate.
                    (-> (feedback/network-id! request env)
                        (.then (fn [network]
-                         (js/fetch "https://murakumo.cloud/api/v1/preview/image-jobs"
+                         (js/fetch "https://api.murakumo.cloud/infer/image-jobs"
                              #js {:method "POST" :headers (clj->js
-                                  (cond-> {"content-type" "application/json" "x-preview-network" network}
+                                  (cond-> {"content-type" "application/json" "authorization" (str "Bearer " (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))}
                                     (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")
                                     (assoc "x-preview-sponsor" (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN"))))
                                   :signal (js/AbortSignal.timeout 20000)
                                   :body (js/JSON.stringify #js {:model profile :prompt prompt
-                                                              :request_id (gobj/get raw "request_id")
+                                                              :id (gobj/get raw "request_id") :network network :lane "oppai"
                                                               :publication_consent consent})}))))))))
       (.catch (fn [_] (error-response "free_unavailable" "無料生成を完了できませんでした。料金は発生しません。" 503)))))
 
 (defn- free-image-status! [request env path]
   (-> (feedback/network-id! request env)
       (.then (fn [network]
-               (js/fetch (str "https://murakumo.cloud/api/v1/preview/image-jobs/" (subs path (count "/api/free/image/jobs/")))
-                         #js {:headers (clj->js {"x-preview-network" network
-                                                "x-preview-sponsor" (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")})
+               (js/fetch (str "https://api.murakumo.cloud/infer/image-jobs/" (subs path (count "/api/free/image/jobs/")) "?network=" network)
+                         #js {:headers (clj->js {"authorization" (str "Bearer " (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))})
                               :signal (js/AbortSignal.timeout 20000)})))
       (.catch (fn [_] (error-response "free_unavailable" "生成状況の確認を再試行しています。" 503)))))
 
