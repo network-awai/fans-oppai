@@ -354,7 +354,9 @@
       (-> db
           (assoc-in [:image :status] :done)
           (assoc-in [:image :model] model)
-          (assoc-in [:image :elapsed-ms] (* 1000 (or (:elapsed_seconds result) 0)))
+          (assoc-in [:image :elapsed-ms] (if (number? (:elapsed_seconds result))
+                                          (* 1000 (:elapsed_seconds result))
+                                          (get-in db [:image :elapsed-ms] 0)))
           (assoc-in [:image :remaining] (:remaining result))
           (assoc-in [:image :job] {:job/id id :job/status :done :job/artifact-url url})
           (update :works conj {:id id :kind :image :prompt (get-in db [:image :prompt])
