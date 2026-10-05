@@ -275,3 +275,8 @@
     (is (false? (db/image-ready? (-> chosen (assoc-in [:fleet :status] :fallback)
                                             (assoc-in [:image :prompt] "a bowl")
                                             (assoc-in [:image :publication-consent?] true)))))))
+
+(deftest asynchronous-image-results-preserve-observed-duration
+  (let [before (assoc-in (ready-image-db) [:image :elapsed-ms] 720000)
+        done (db/free-image-result before {:model "future-image" :image "data:image/png;base64,iVBORtest"})]
+    (is (= 720000 (get-in done [:image :elapsed-ms])))))
