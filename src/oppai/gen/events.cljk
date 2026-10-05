@@ -143,9 +143,9 @@
                       (fn [db [_ k v]]
                         (cond-> (assoc-in db [:image k] v)
                           (and (= k :free?) v
-                               (not (contains? #{"animagine-xl-4.0" "waiREALMIX_v11"}
-                                               (get-in db [:image :model]))))
-                          (assoc-in [:image :model] "animagine-xl-4.0"))))
+                               (not (some #(= (:model-id %) (get-in db [:image :model]))
+                                          (get-in db [:fleet :image]))))
+                          (assoc-in [:image :model] (:model-id (first (get-in db [:fleet :image])))))))
      (rf/reg-event-fx :work/remix
                       (fn [{:keys [db]} [_ id]]
                         {:db (db/remix-work db id)

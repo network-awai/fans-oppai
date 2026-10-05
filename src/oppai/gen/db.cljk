@@ -82,7 +82,7 @@
                        :video fleet/video-models
                        :text nil
                        :ts (now-ms)})
-        (update-in [:image :model] #(or % (when (some #{(:default parsed)} live) (:default parsed))
+        (update-in [:image :model] #(or (when (some #{%} live) %) (when (some #{(:default parsed)} live) (:default parsed))
                                        (catalog/default-model live)))
         (update-in [:image :face-mode]
                    (fn [m] (if (some #{m} (:face-modes parsed)) m
@@ -171,7 +171,9 @@
    (and (not= :running (get-in db [:image :status]))
         (seq (str/trim (str (get-in db [:image :prompt]))))
         (if (get-in db [:image :free?])
-          (and (true? (get-in db [:image :publication-consent?]))
+          (and (= :ready (get-in db [:fleet :status]))
+               (some #(= (:model-id %) (get-in db [:image :model])) (get-in db [:fleet :image]))
+               (true? (get-in db [:image :publication-consent?]))
                (<= (count (get-in db [:image :prompt])) 2000))
           (seq (str (get-in db [:image :model]))))
         (or (get-in db [:image :free?]) (not (get-in db [:image :face-ref?]))
@@ -234,7 +236,7 @@
   [db model-id]
   (-> db
       (assoc-in [:image :model] (str model-id))
-      (assoc-in [:image :free?] (contains? #{"animagine-xl-4.0" "waiREALMIX_v11"} (str model-id)))
+      (assoc-in [:image :free?] (boolean (some #(= (:model-id %) (str model-id)) (get-in db [:fleet :image]))))
       (assoc :tab :image)))
 
 (defn producer-brief [db brief-id]
@@ -346,7 +348,7 @@
 (defn free-image-result [db result]
   (let [url (:image result)
         id (or (get-in result [:artifact :id]) (new-id "free"))
-        model (if (= "waiREALMIX_v11" (or (:base_model result) (:model result))) "waiREALMIX_v11" "animagine-xl-4.0")]
+        model (or (:base_model result) (:model result) (get-in db [:image :model]))]
     (if-not (and (string? url) (str/starts-with? url "data:image/png;base64,iVBOR"))
       (image-failed db "生成結果を確認できませんでした。")
       (-> db
