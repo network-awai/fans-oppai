@@ -41,12 +41,11 @@
       ;; upstream could not confirm the exact id — the UI must be able to say so
       (is (false? (:exact? ltx))))))
 
-(deftest fallback-is-marked-as-a-fallback
-  (testing "an unreachable map still gives a usable picker, honestly labelled"
+(deftest unavailable-catalog-fails-closed
+  (testing "an unreachable catalog cannot advertise unverified model capability"
     (let [parsed (fleet/parse-model-map {})
           models (fleet/image-models parsed)]
-      (is (seq models))
-      (is (every? :fallback? models)))))
+      (is (empty? models)))))
 
 (deftest video-models-are-not-taken-from-the-mac-mini-scan
   ;; Douga runs on the generation job API, which has its own allowlist. Reading

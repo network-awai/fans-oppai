@@ -215,23 +215,27 @@
     (is (= "user" (:role (last (db/chat-messages-for-api post)))))
     (is (= "こんにちは" (:content (last (db/chat-messages-for-api post)))))))
 
+(defn ready-image-db []
+  (db/fleet-loaded (db/initial-db) {:image [{:model-id "animagine-xl-4.0" :label "Animagine"}
+                                             {:model-id "waiREALMIX_v11" :label "WAI"}
+                                             {:model-id "future-image" :label "Future model"}]}))
 (deftest free-generation-requires-current-publication-consent
-  (let [d (assoc-in (db/initial-db) [:image :prompt] "a garden")]
+  (let [d (assoc-in (ready-image-db) [:image :prompt] "a garden")]
     (is (false? (db/image-ready? d)))
     (is (true? (db/image-ready? (assoc-in d [:image :publication-consent?] true))))
     (is (false? (db/image-ready? (-> d (assoc-in [:image :publication-consent?] true)
                                    (assoc-in [:image :prompt] (apply str (repeat 2001 "a")))))))))
 
 (deftest free-results-retain-canonical-model-and-private-shelf
-  (let [d (db/free-image-result (db/initial-db)
-                               {:image "data:image/png;base64,iVBORtest" :elapsed_seconds 2 :remaining 4})]
+  (let [d (db/free-image-result (ready-image-db)
+                               {:image "data:image/png;base64,iVBORtest" :model "animagine-xl-4.0" :elapsed_seconds 2 :remaining 4})]
     (is (= :done (get-in d [:image :status])))
     (is (= "animagine-xl-4.0" (:model (first (:works d)))))
     (is (= false (:face? (first (:works d)))))
     (is (= 4 (get-in d [:image :remaining])))))
 
 (deftest wairealmix-free-model-keeps-its-identity
-  (let [chosen (db/choose-model (db/initial-db) "waiREALMIX_v11")
+  (let [chosen (db/choose-model (ready-image-db) "waiREALMIX_v11")
         done (db/free-image-result chosen {:base_model "waiREALMIX_v11"
                                           :image "data:image/png;base64,iVBORtest"})]
     (is (true? (get-in chosen [:image :free?])))
@@ -240,7 +244,7 @@
 
 
 (deftest producer-brief-resets-sensitive-options
-  (let [before (-> (db/initial-db)
+  (let [before (-> (ready-image-db)
                    (assoc-in [:image :face-ref?] true)
                    (assoc-in [:image :publication-consent?] true))
         after (db/producer-brief before :portrait)]
@@ -252,7 +256,7 @@
     (is (= before (db/producer-brief before :unknown)))))
 
 (deftest public-work-remix-preserves-free-boundary
-  (let [before (-> (db/initial-db)
+  (let [before (-> (ready-image-db)
                    (assoc-in [:image :publication-consent?] true)
                    (assoc-in [:image :face-ref?] true))
         after (db/remix-work before "producer-portrait-20260911")]
@@ -262,3 +266,12 @@
     (is (false? (get-in after [:image :publication-consent?])))
     (is (false? (get-in after [:image :face-ref?])))
     (is (= before (db/remix-work before "missing")))))
+
+(deftest published-models-retain-dynamic-identity
+  (let [chosen (db/choose-model (ready-image-db) "future-image")
+        done (db/free-image-result chosen {:model "future-image" :image "data:image/png;base64,iVBORtest"})]
+    (is (true? (get-in chosen [:image :free?])))
+    (is (= "future-image" (:model (first (:works done)))))
+    (is (false? (db/image-ready? (-> chosen (assoc-in [:fleet :status] :fallback)
+                                            (assoc-in [:image :prompt] "a bowl")
+                                            (assoc-in [:image :publication-consent?] true)))))))
