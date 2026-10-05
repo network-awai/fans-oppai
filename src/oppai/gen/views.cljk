@@ -32,7 +32,7 @@
                     (str "モデル一覧を取得できませんでした（" error
                          "）。既知のモデルを表示しています。")]
          [:p {:class "oppai-note"}
-          "モデル一覧は生成ノードの ComfyUI が今この瞬間に持つチェックポイントです。"]))))
+          "実生成を検証して公開されたMurakumoの共通モデル一覧です。空いているGPUへ自動で割り当てます。"]))))
 
 ;; ---- chat -------------------------------------------------------------------
 
@@ -191,7 +191,7 @@
          (when-not free? [:div
          [:div {:class "oppai-form-row"}
           (ui/field {:label "モデル" :for "image-model"
-                     :support (or (:tagline card) "生成ノードに実際に載っているチェックポイントです。")}
+                     :support (or (:tagline card) "Murakumoの共通カタログに公開されたモデルです。")}
                     (ui/select {:id "image-model" :value model :disabled busy?
                                 :class "oppai-full"
                                 :on-change (set-str :model)}
