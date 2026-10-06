@@ -46,3 +46,5 @@ The story is a durable shared receipt workflow, not a fresh theme each hour. --p
 The existing Itonami signed bots-status publisher imports this Hermes resident. Its public projection and native Itonami Bot service are separate acceptance gates. The native local /api/agent-bots currently answers not-this-server; never claim native Bot execution from a Hermes cron receipt. Preserve publication and working evidence even when that separate status plane is unavailable.
 
 MCP publication source has been merged to main. If a stale connected MCP rejects the new story profile, invoke the identical local stdio server at scripts/producer_mcp.cljk with OPPAI_REPO set to this runtime checkout. Do not invent another publication implementation. Never change shared client configuration during hourly runs.
+
+The cron pre-script producer_tick.sh performs the canonical idempotent submission/poll before the conversational agent starts. Read its injected result and the same receipt. Calling --story again is a status/resume operation for that hour, never a second POST. Conversation capacity failure must not erase an accepted image job.
