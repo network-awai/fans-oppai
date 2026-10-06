@@ -59,13 +59,17 @@
     (let [input (str "ツールは使わず、画像も公開も行わず、次のストーリー場面の連続性を確認してください。"
                      "人物は架空の32歳の葵、全身を衣服で覆った港町の旅です。"
                      "各エピソードは到着、発見、旅、解決の順です。"
+                     "場面番号は0始まりで、indexを4で割った余りが0=arrival、1=discovery、2=journey、3=resolutionです。"
+                     "arrivalの次はdiscoveryです。この順序を変えずcandidateとexpectedの番号・場面・人物を比較してください。"
                      "回答はJSONだけ: {\"approved\":trueまたはfalse,\"hour\":指定のhour,"
                      "\"story_id\":指定のstory_id,\"index\":指定のindex,\"reason\":短い理由}。"
                      (js/JSON.stringify (clj->js {:hour hour :candidate (:story request)
+                                                 :expected (select-keys (story/next-scene past) [:id :index :episode :story_id :character])
                                                  :published (mapv #(select-keys (:story %) [:index :episode :id :story_id :text])
-                                                                  (take-last 8 (sort-by :hour (filter story/published? past))))})))
+                                                                  (take-last 8 (sort-by :hour (filter #(and (story/published? %)
+                                                                                                           (= "aoi-harbor" (get-in % [:story :story_id]))) past))))})))
           started (cli! ["itonami" "run" "--profile" (:bot_id c) "--input" input "--json-body"
-                         (js/JSON.stringify #js {:input input :response_mode "text-only"})])]
+                         (js/JSON.stringify #js {:input input :response_mode "text-only" :context_mode "isolated"})])]
       (when-not (seq (:run_id started)) (throw (js/Error. "Native story run was not accepted")))
       (-> (poll! (:run_id started) (+ (.now js/Date) 240000) cli!)
           (.then (fn [status]
