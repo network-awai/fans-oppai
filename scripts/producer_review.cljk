@@ -46,7 +46,9 @@
                                        {:type "image_url" :image_url {:url image}}]}]})
 (defn result [hour r]
   (assoc (select-keys r [:state :reviewed :sha256 :reason]) :hour hour :review (:review r)))
-(defn run! [hour]
+(defn run!
+  ([hour] (run! hour js/fetch))
+  ([hour fetch!]
   (let [rp (pub/receipt-path hour) dir (path/dirname rp)
         r (io/read-json rp) request (io/read-json (path/join dir "request.json"))
         response (io/read-json (path/join dir "response.json"))
@@ -66,14 +68,14 @@
     (if (:reviewed r) (js/Promise.resolve (result hour r))
       (let [lock (path/join pub/root "run.lock") token (credential)]
         (fs/mkdirSync lock)
-        (-> (js/fetch (str endpoint "/fleet/readiness") #js {:headers #js {"user-agent" io/user-agent}
+        (-> (fetch! (str endpoint "/fleet/readiness") #js {:headers #js {"user-agent" io/user-agent}
                                                             :signal (.timeout js/AbortSignal 15000)})
             (.then (fn [res] (when-not (.-ok res) (throw (js/Error. "Murakumo catalog unavailable"))) (.json res)))
             (.then (fn [body]
                      (let [m (get-in (js->clj body :keywordize-keys true) [:models (keyword model)])]
                        (when-not (and (= "text" (:kind m)) (pos? (:ready m 0)))
                          (throw (js/Error. "Qualified Murakumo native vision is unavailable")))
-                       (js/fetch (str endpoint "/chat/completions")
+                       (fetch! (str endpoint "/chat/completions")
                                  #js {:method "POST" :headers #js {"authorization" (str "Bearer " token) "content-type" "application/json" "user-agent" io/user-agent}
                                       :body (js/JSON.stringify (clj->js (review-body request image)))
                                       :signal (.timeout js/AbortSignal 180000)}))))
@@ -84,7 +86,7 @@
                                              :job_id (.get (.-headers res) "x-murakumo-job-id")
                                              :response (js->clj body :keywordize-keys true)}]
                                     (io/save! (path/join dir "review-response.json") raw)
-                                    (when-not (.-ok res) (throw (js/Error. (str "Murakumo native review HTTP " (.-status res)))))
+                                    (when-not (.-ok res) (throw (js/Error. (str "Murakumo native review HTTP " (.-status res))))))
                                   (let [answer (js->clj body :keywordize-keys true)
                                         decision (js->clj (js/JSON.parse (get-in answer [:choices 0 :message :content])) :keywordize-keys true)
                                         current (io/read-json rp)

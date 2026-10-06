@@ -1,6 +1,7 @@
 (ns producer-review-test
-  (:require [producer-review :as r] [producer-pipeline :as pipeline]
-            [cljs.test :as t :refer [deftest is run-tests]]))
+  (:require [producer-review :as r] [producer-publish :as pub] [producer-story :as story] [producer-io :as io]
+            ["fs" :as fs] ["os" :as os] ["path" :as path] [producer-pipeline :as pipeline]
+            [cljs.test :as t :refer [deftest is run-tests async]]))
 (def good {:adult true :clothed true :character true :scene true
            :blank false :ui false :exposed false :text_artifacts false
            :decision "approve" :evidence "A clothed woman reads a map beside a fountain." :issues []})
@@ -28,4 +29,35 @@
     (is (= "/owned/repo" (aget e "OPPAI_REPO")))))
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
+(deftest native-review-chain-cleans-lock-and-binds-evidence
+  (async done
+    (let [dir (fs/mkdtempSync (path/join (os/tmpdir) "oppai-review-chain-"))
+          hour "20261006T10Z" rp (path/join dir "receipt.json")
+          request (story/request [] hour)
+          ;; Publishing adapter checks the PNG signature and dimensions, no decoder is involved here.
+          bytes (js/Buffer.alloc 24) _ (.copy (js/Buffer.from "89504e470d0a1a0a" "hex") bytes)
+          _ (.writeUInt32BE bytes 528 16) _ (.writeUInt32BE bytes 528 20)
+          receipt (merge (select-keys request [:story :profile :request_id]) {:state "generated" :hour hour})
+          response {:price 0 :model (:model request) :jobId (:request_id request)
+                    :image (str "data:image/png;base64," (.toString bytes "base64"))}
+          old-fetch js/fetch calls (atom [])
+          fake (fn [url _]
+                 (swap! calls conj url)
+                 (js/Promise.resolve
+                  (if (.endsWith url "/fleet/readiness")
+                    #js {:ok true :json #(js/Promise.resolve (clj->js {:models {(keyword r/model) {:kind "text" :ready 2}}}))}
+                    #js {:ok true :status 200 :headers #js {:get (fn [k] (case k "x-murakumo-node" "jacob-vision" "x-murakumo-job-id" "owned-job" nil))}
+                         :json #(js/Promise.resolve (clj->js {:model r/model :choices [{:finish_reason "stop" :message {:content (js/JSON.stringify (clj->js good))}}]}))})))]
+      (io/save! rp receipt) (io/save! (path/join dir "request.json") request)
+      (io/save! (path/join dir "response.json") response)
+      (-> (with-redefs [pub/root dir pub/receipt-path (fn [_] rp) r/credential (fn [] "fixture-token")]
+            (r/run! hour fake))
+          (.then (fn [result]
+                   (is (true? (:reviewed result)))
+                   (is (= (pub/sha bytes) (get-in (io/read-json rp) [:review :sha256])))
+                   (is (= "owned-job" (get-in (io/read-json rp) [:review :job_id])))
+                   (is (= [(str r/endpoint "/fleet/readiness") (str r/endpoint "/chat/completions")] @calls))
+                   (is (not (fs/existsSync (path/join dir "run.lock"))))))
+          (.catch (fn [e] (is false (.-message e))))
+          (.finally (fn [] (fs/rmSync dir #js {:recursive true}) (done)))))))
 (run-tests)
