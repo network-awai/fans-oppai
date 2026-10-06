@@ -1,6 +1,7 @@
 (ns producer-pipeline
   "One bounded story pass; publishing always uses the canonical stdio MCP."
   (:require [producer-io :as io] [producer-publish :as pub] [producer-story :as story]
+            [producer-native-story :as native-story]
             ["fs" :as fs] ["path" :as path] ["os" :as os] ["child_process" :as cp]))
 
 (defn environment [repo]
@@ -100,10 +101,16 @@
       (let [past (history)
             pending (first (sort-by :hour (filter pending-receipt? past)))
             request (story/request past hour)
-            r (if pending
-                (if (= "waiting" (:state pending)) (io/resume! (pub/receipt-path (:hour pending)) io/request!) pending)
-                (io/run! pub/root hour request io/request!))]
-        (-> (poll! r (+ (.now js/Date) 180000))
+            existing? (fs/existsSync (pub/receipt-path hour))
+            prepared (if (or pending existing?) (js/Promise.resolve request)
+                       (-> (native-story/validate! request hour past)
+                           (.then #(assoc-in request [:story :native_bot] %))))]
+        (-> prepared
+            (.then (fn [request]
+                     (let [r (if pending
+                               (if (= "waiting" (:state pending)) (io/resume! (pub/receipt-path (:hour pending)) io/request!) pending)
+                               (io/run! pub/root hour request io/request!))]
+                       (poll! r (+ (.now js/Date) 180000)))))
             (.then #(finish! repo %))
             (.finally #(fs/rmdirSync lock))))
       (catch :default e (fs/rmdirSync lock) (throw e)))))
