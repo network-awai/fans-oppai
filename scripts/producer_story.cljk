@@ -1,0 +1,26 @@
+(ns producer-story
+  "Persistent story progression: only reviewed, deployed scenes advance."
+  (:require ["crypto" :as crypto]))
+(def character {:id "aoi-32" :name "葵" :age 32
+                :appearance "fictional adult woman age 32, short black bob hair, brown eyes, navy coat, cream scarf, fully clothed"})
+(def scenes
+  [{:id "arrival" :title "葵・港町への到着" :text "arriving at a quiet harbor town, holding a folded map, morning light"}
+   {:id "discovery" :title "葵・古い地図の手がかり" :text "studying an old map beside a stone fountain, noticing a lighthouse, afternoon light"}
+   {:id "journey" :title "葵・灯台への道" :text "walking along the coastal path toward a lighthouse, wind moving her scarf, evening light"}
+   {:id "resolution" :title "葵・灯台からの眺め" :text "standing on the lighthouse terrace, overlooking the harbor she reached, sunrise, peaceful resolution"}])
+(defn published? [r]
+  (and (#{"deployed" "published"} (:state r)) (true? (:reviewed r))
+       (seq (:sha256 r)) (seq (:version r)) (seq (:url r))))
+(defn next-scene [history]
+  (let [completed (set (keep #(when (published? %) (get-in % [:story :index])) history))
+        index (first (remove completed (range 100000)))
+        scene (nth scenes (mod index (count scenes)))]
+    (assoc scene :index index :episode (inc (quot index (count scenes)))
+           :story_id "aoi-harbor" :character character)))
+(defn request [history hour]
+  (let [s (next-scene history)
+        hex (.digest (.update (crypto/createHash "sha256") (str "oppai-story-v1:" hour ":" (:index s))) "hex")
+        id (str (subs hex 0 8) "-" (subs hex 8 12) "-4" (subs hex 13 16) "-a" (subs hex 17 20) "-" (subs hex 20 32))]
+    {:model "waiREALMIX_v11" :request_id id :profile "story-aoi-harbor"
+     :story s :publication_consent "public-examples-v1"
+     :prompt (str (:appearance character) ", " (:text s) ", cinematic still frame, realistic photograph, no nudity, no text")}))

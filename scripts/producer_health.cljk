@@ -1,0 +1,42 @@
+(ns producer-health
+  "Read-only health of the canonical producer receipts; no fleet submissions."
+  (:require [producer-io :as io] ["fs" :as fs] ["path" :as path] ["os" :as os]))
+(defn summary [receipts now-ms]
+  (let [latest (last (sort-by :hour receipts))
+        time (when latest (js/Date.parse (or (:updated_at latest) (:created_at latest))))
+        age (when (and time (not (js/isNaN time))) (/ (- now-ms time) 3600000))
+        state (:state latest)]
+    {:status (cond (nil? latest) "missing"
+                   (or (nil? age) (> age 3)) "stale"
+                   (#{"failed" "skipped" "uncertain" "rejected" "generated" "submitting" "waiting"} state) "attention"
+                   (not (and (:reviewed latest) (:public_image_fetch_verified latest) (:mcp_verified latest))) "attention"
+                   :else "healthy")
+     :latest_hour (:hour latest) :latest_state state
+     :age_hours age :receipt_count (count receipts)
+     :completed_count (count (filter #(#{"deployed" "published"} (:state %)) receipts))
+     :pending_count (count (filter #(#{"waiting" "submitting" "generated" "uncertain"} (:state %)) receipts))}))
+(defn run! []
+  (let [root (path/join (os/homedir) ".local/state/oppai-producer")
+        receipts (when (fs/existsSync root)
+                   (keep (fn [hour]
+                           (when (re-matches #"\d{8}T\d{2}Z" hour)
+                             (let [p (path/join root hour "receipt.json")]
+                               (when (fs/existsSync p) (io/read-json p)))))
+                         (js->clj (fs/readdirSync root))))
+        generation (summary receipts (.now js/Date))
+        jobs-path (path/join (os/homedir) ".hermes/profiles/oppai-producer/cron/jobs.json")
+        reviewer (when (fs/existsSync jobs-path)
+                   (some #(when (= "f07848c63ecb" (:id %)) %) (:jobs (io/read-json jobs-path))))
+        native? (= "producer_pipeline.sh" (:script reviewer))
+        result (assoc generation :generation_status (:status generation)
+                      :review_last_status (:last_status reviewer)
+                      :review_last_run_at (:last_run_at reviewer)
+                      :review_mode (cond native? "murakumo-native" (:no_agent reviewer) "manual" :else "agent")
+                      :status (cond (and (:no_agent reviewer) (not native?)) "manual-review"
+                                    (nil? reviewer) "missing-reviewer"
+                                    (= "error" (:last_status reviewer)) "review-attention"
+                                    (and native? (not= "ok" (:last_status reviewer))) "review-unverified"
+                                    :else (:status generation)))]
+    (println (js/JSON.stringify (clj->js result)))
+    (when-not (= "healthy" (:status result)) (set! (.-exitCode js/process) 1))))
+(when (= "--run" (first *command-line-args*)) (run!))

@@ -10,18 +10,27 @@ const r2 = {get:(k)=>Promise.resolve(store.has(k)?{text:()=>Promise.resolve(stor
  list:(o)=>Promise.resolve({objects:[...store.keys()].filter(k=>k.startsWith(o.prefix)).map(k=>({key:k}))})};
 const pending=[];
 const ctx={waitUntil:(p)=>pending.push(Promise.resolve(p).catch(e=>console.error('BG-ERR:',e&&e.message)))};
-const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret'};
+const env={OPPAI_R2:r2,OPPAI_PREVIEW_SPONSOR_TOKEN:'test-only-secret',MURAKUMO_IMAGE_ADAPTER_TOKEN:'adapter-only'};
 // fetch stub: video preview returns a done job, everything else daily_limit 429
 globalThis.fetch = (target, init) => {
+  if(String(target).includes('/infer/image-models?site=oppai')) return Promise.resolve(Response.json({models:[{id:'qwen-image-2.1-uncensored',label:'Qwen Image 2.1 Uncensored',width:512,height:512,ready:2,replicas:2}]}));
+  if (String(target).includes('/infer/image-jobs')) {
+    assert.match(JSON.parse(init.body).id, /^[a-f0-9-]{36}$/);
+    assert.equal(JSON.parse(init.body).model, 'qwen-image-2.1-uncensored');
+    assert.equal(init.headers.authorization,'Bearer adapter-only');
+    assert.equal(JSON.parse(init.body).lane,'oppai');
+    assert.match(JSON.parse(init.body).network,/^[a-f0-9]{64}$/);
+  }
   if (String(target).includes('/preview/video'))
     return Promise.resolve(new Response(JSON.stringify({status:'done',artifactUrl:'/api/v1/preview/video/jobs/9cd52d7c-8727-4f96-aa96-df891fe03caf/artifact'})));
   return Promise.resolve(new Response(JSON.stringify({error:{code:'daily_limit',message:'quota'}}), {status:429}));
 };
 const req=(path,body,ip)=>new Request('https://oppai.fans'+path,{method:'POST',headers:{origin:'https://oppai.fans','content-type':'application/json','cf-connecting-ip':ip},body:JSON.stringify(body)});
 const valid={category:'bug',message:'first visit quota issue',page:'#image',error_id:''};
-const free={model:'waiREALMIX_v11',prompt:'DO_NOT_LOG_PROMPT',publication_consent:'public-examples-v1'};
+const free={request_id:'329a7eb9-6f04-40c7-a32d-84c34cc8dba4',model:'qwen-image-2.1-uncensored',prompt:'DO_NOT_LOG_PROMPT',publication_consent:'public-examples-v1'};
 const call=async(path,body,ip,expected)=>{const r=await worker.fetch(req(path,body,ip),env,ctx);assert.equal(r.status,expected);return r.json()};
 try{
+  const catalogResponse=await worker.fetch(new Request('https://oppai.fans/api/image-models'),env,ctx);assert.equal(catalogResponse.status,200);assert.equal((await catalogResponse.json()).models[0].id,'qwen-image-2.1-uncensored');
   const step=(s)=>console.log('STEP',s);
   for(let i=0;i<10;i++) await call('/api/feedback',valid,'192.0.2.1',201);
   step('0');await call('/api/feedback',valid,'192.0.2.1',429);
@@ -54,6 +63,12 @@ try{
   await Promise.all(pending);
   console.log('POST-SWEEP keys:',[...store.keys()].join(','));assert.equal([...store.keys()].filter(k=>k.startsWith('feedback/')).length,0);
   assert.equal([...store.keys()].filter(k=>k.startsWith('site-errors/')).length,0);
+  store.set('heads/unrelated','preserve');
+  env.OPPAI_R2_PREFIX='oppai-fans/';
+  await call('/api/feedback',valid,'192.0.2.99',201);
+  assert.ok([...store.keys()].some(k=>k.startsWith('oppai-fans/feedback/')));
+  await worker.scheduled(null,env,ctx);await Promise.all(pending);
+  assert.equal(store.get('heads/unrelated'),'preserve');
   console.log('Support integration passed: persistence, limits, isolation, spoof rejection, privacy, retention, error IDs');
 }catch(e){console.error('FAIL:',e&&e.stack||e);process.exit(1)}
 process.exit(0);

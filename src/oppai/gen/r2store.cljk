@@ -24,6 +24,8 @@
   (boolean (gobj/get env "OPPAI_R2")))
 
 (defn- r2 [env] (gobj/get env "OPPAI_R2"))
+(defn- namespace-prefix [env] (or (gobj/get env "OPPAI_R2_PREFIX") ""))
+(defn- storage-key [env k] (str (namespace-prefix env) k))
 
 (defn expired?
   "A record without :expires-at is always live (KV rows without TTL were
@@ -51,7 +53,7 @@
   (let [now (or now (.now js/Date))]
     (if-not (r2 env)
       (js/Promise.resolve nil)
-      (-> (.get (r2 env) k)
+      (-> (.get (r2 env) (storage-key env k))
           (.then (fn [^js obj] (parse obj now)))))))
 
 (defn put-json!
@@ -61,14 +63,14 @@
   [env k record & [ttl-s]]
   (let [record (cond-> record
                  ttl-s (assoc :expires-at (+ (.now js/Date) (* ttl-s 1000))))]
-    (-> (.put (r2 env) k (js/JSON.stringify (clj->js record)))
+    (-> (.put (r2 env) (storage-key env k) (js/JSON.stringify (clj->js record)))
         (.then (fn [_] record)))))
 
 (defn delete!
   [env k]
   (if-not (r2 env)
     (js/Promise.resolve nil)
-    (.delete (r2 env) k)))
+    (.delete (r2 env) (storage-key env k))))
 
 (defn list-keys
   "All object keys under `prefix`, as a Promise of a vector of strings.
@@ -76,9 +78,9 @@
   [env prefix]
   (if-not (r2 env)
     (js/Promise.resolve [])
-    (-> (.list (r2 env) #js {:prefix prefix})
+    (-> (.list (r2 env) #js {:prefix (storage-key env prefix)})
         (.then (fn [^js listing]
-                 (mapv #(.-key %) (aget listing "objects")))))))
+                 (mapv #(subs (.-key %) (count (namespace-prefix env))) (aget listing "objects")))))))
 
 (defn sweep!
   "Delete every object under `prefix` whose record has expired. Returns a

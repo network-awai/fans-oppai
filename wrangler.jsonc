@@ -48,8 +48,9 @@
   // The cron sweep deletes expired objects (old DELETE cron, moved to
   // oppai.gen.feedback/cleanup! over R2 list+delete).
   "r2_buckets": [
-    { "binding": "OPPAI_R2", "bucket_name": "oppai-fans-data" }
+    { "binding": "OPPAI_R2", "bucket_name": "kotobase-merkle-lsm" }
   ],
+  "vars": {"OPPAI_R2_PREFIX": "oppai-fans/"},
   "triggers": {"crons": ["17 * * * *"]},
   "observability": { "enabled": true }
 }

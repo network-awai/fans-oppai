@@ -1,0 +1,189 @@
+(ns producer-publish
+  "Local operator publishing adapter. Only reviewed free-generation receipts."
+  (:require [cljs.reader :as reader] [producer-io :as io] [producer-story :as story] [oppai.gen.producer-profiles :as profiles]
+            ["fs" :as fs] ["path" :as path] ["os" :as os]
+            ["crypto" :as crypto] ["child_process" :as cp]))
+
+(def root (path/join (os/homedir) ".local/state/oppai-producer"))
+(defn sha [bytes] (.digest (.update (crypto/createHash "sha256") bytes) "hex"))
+(defn receipt-path [hour]
+  (when-not (and (string? hour) (re-matches #"\d{8}T\d{2}Z" hour))
+    (throw (js/Error. "Invalid UTC hour")))
+  (path/join root hour "receipt.json"))
+(defn pending []
+  (if-not (fs/existsSync root) []
+    (vec (keep (fn [name]
+                 (when (re-matches #"\d{8}T\d{2}Z" name)
+                   (let [p (receipt-path name)]
+                     (when (fs/existsSync p)
+                       (let [r (io/read-json p)]
+                         (when (#{"generated" "deployed" "published"} (:state r))
+                           (assoc (select-keys r [:state :title :profile :model :sha256 :reviewed :url :version :story :job_id]) :hour name)))))))
+               (js->clj (fs/readdirSync root))))))
+
+(defn prepare-data [hour expected-sha r response request]
+  (when-not (and (#{"generated" "deployed" "published"} (:state r))
+                 (true? (:reviewed r)) (= 0 (:price response))
+                 (#{"waiREALMIX_v11" "animagine-xl-4.0"} (:model response))
+                 (= (:model request) (:model response))
+                 (= "public-examples-v1" (:publication_consent request))
+                 (string? (:title r)) (<= 1 (count (:title r)) 160)
+                 (or (nil? (:profile r))
+                     (and (not= "story-aoi-harbor" (:profile r)) (profiles/by-id (:profile r)))
+                     (and (= "story-aoi-harbor" (:profile r)) (= (:story r) (:story request))
+                          (= "aoi-harbor" (get-in r [:story :story_id]))
+                          (= story/character (get-in r [:story :character]))))
+                 (string? (:image response))
+                 (.startsWith (:image response) "data:image/png;base64,"))
+    (throw (js/Error. "A reviewed, zero-price PNG receipt is required")))
+  (let [bytes (js/Buffer.from (subs (:image response) 22) "base64") digest (sha bytes)]
+    (when-not (and (= expected-sha digest (:sha256 r)) (<= 24 (.-length bytes) (* 15 1024 1024))
+                   (= "89504e470d0a1a0a" (.toString (.subarray bytes 0 8) "hex")))
+      (throw (js/Error. "PNG or expected SHA256 mismatch")))
+    (let [id (str "producer-" hour)]
+      {:bytes bytes
+       :work (cond-> {:id id :producer "producer" :title (:title r)
+                      :model (:model response) :prompt (:prompt request)
+                      :image (str "/img/" id ".png") :sha256 digest
+                      :width (.readUInt32BE bytes 16) :height (.readUInt32BE bytes 20)
+                      :tags (vec (:tags r))}
+               (:profile r) (assoc :profile (:profile r))
+               (:story request) (assoc :story (:story request)))})))
+
+(defn command [repo argv]
+  ;; Arguments never pass through a shell. Child output never contaminates MCP stdout.
+  (let [r (cp/spawnSync (first argv) (clj->js (rest argv))
+                       #js {:cwd repo :encoding "utf8" :timeout 600000 :maxBuffer 4194304})]
+    (when-not (= 0 (.-status r))
+      (.write (.-stderr js/process) (str (.-stdout r) (.-stderr r)))
+      (throw (js/Error. (str "Command failed: " (first argv)))))
+    (.-stdout r)))
+
+(defn publish! [repo hour expected-sha expected-version]
+  (let [rp (receipt-path hour) dir (path/dirname rp)
+        r (io/read-json rp)
+        {:keys [bytes work]} (prepare-data hour expected-sha r
+                                (io/read-json (path/join dir "response.json"))
+                                (io/read-json (path/join dir "request.json")))
+        lock (path/join root "run.lock")]
+    (if (#{"deployed" "published"} (:state r))
+      (select-keys r [:state :url :commit :version :sha256])
+      (do
+        (fs/mkdirSync lock)
+        (try
+          (when-not (= "https://github.com/network-awai/fans-oppai.git"
+                       (.trim (command repo ["git" "remote" "get-url" "origin"])))
+            (throw (js/Error. "Unexpected repository")))
+          (when-not (= "" (.trim (command repo ["git" "status" "--porcelain"])))
+            (throw (js/Error. "Checkout must be clean; preserve existing changes")))
+          (command repo ["git" "fetch" "origin"])
+          (command repo ["git" "merge-base" "--is-ancestor" "origin/main" "HEAD"])
+          (let [catalog (path/join repo "src/oppai/gen/catalog.cljk")
+                source (fs/readFileSync catalog "utf8")
+                image-path (subs (:image work) 1)
+                marker "(def public-works\n  ["
+                existing (.includes source (str ":id \"" (:id work) "\""))]
+            (if existing
+              (when-not (and (fs/existsSync (path/join repo "public" image-path))
+                            (= expected-sha (sha (fs/readFileSync (path/join repo "public" image-path)))))
+                (throw (js/Error. "Existing post does not match receipt")))
+              (do
+                (when-not (.includes source marker) (throw (js/Error. "Catalog marker changed")))
+                (fs/writeFileSync (path/join repo "public" image-path) bytes)
+                (fs/writeFileSync catalog (.replace source marker (str marker (pr-str work) "\n   ")))
+                (command repo ["git" "add" "src/oppai/gen/catalog.cljk" (str "public/" image-path)])
+                (command repo ["git" "commit" "-m" (str "Publish reviewed Producer work " hour)])))
+            (command repo ["npm" "test"])
+            (let [guard "/Users/junkawasaki/github/com-junkawasaki/scripts/resource-guard.mjs"
+                  commit (.trim (command repo ["git" "rev-parse" "HEAD"]))
+                  branch (.trim (command repo ["git" "branch" "--show-current"]))]
+              (command repo ["node" guard "run" "build" "--" "npm" "run" "build"])
+              (command repo ["git" "push" "origin" branch])
+              ;; Guarded child rechecks the live version while holding the deploy lock.
+              (command repo ["node" guard "run" "deploy" "--" "kbb" "--backend" "sci"
+                             "--classpath" "scripts:src" "scripts/producer_deploy.cljk" expected-version commit])
+              (let [deployments (js->clj (js/JSON.parse (command repo ["npx" "wrangler" "deployments" "list" "--json"])) :keywordize-keys true)
+                    version (get-in (last (sort-by :created_on deployments)) [:versions 0 :version_id])
+                    result (merge r {:state "deployed" :url (str "https://oppai.fans/#post/" (:id work))
+                                     :commit commit :version version :sha256 expected-sha})]
+                (io/save! rp result)
+                (select-keys result [:state :url :commit :version :sha256]))))
+          (finally (fs/rmdirSync lock)))))))
+
+(defn verification [hour r deployments image-sha catalog-source]
+  (let [marker "(def public-works"
+        start (.indexOf catalog-source marker)
+        works (when (>= start 0) (nth (reader/read-string (subs catalog-source start)) 2))
+        matches (filter #(= (str "producer-" hour) (:id %)) works)
+        work (first matches)
+        active (:versions (last (sort-by :created_on deployments)))
+        checks {:active_version_matches (= [{:version_id (:version r) :percentage 100}] active)
+                :image_hash_matches (= (:sha256 r) image-sha)
+                :catalog_matches (and (= 1 (count matches))
+                                      (= (str "/img/producer-" hour ".png") (:image work))
+                                      (= "producer" (:producer work))
+                                      (= (select-keys r [:title :model :profile :sha256])
+                                         (select-keys work [:title :model :profile :sha256])))}]
+    {:hour hour :url (:url r) :receipt_state (:state r)
+     :status (cond (not (:active_version_matches checks)) "deployment_changed"
+                   (every? true? (vals checks)) "deployment_verified"
+                   :else "artifact_mismatch")
+     :checks checks :commit (:commit r) :version (:version r) :active_versions active
+     :checked_at (.toISOString (js/Date.))
+     :verification_scope "Cloudflare deployment control plane and committed source artifact"
+     :browser_verified false :public_image_fetch_verified false}))
+
+(defn verify! [repo hour]
+  (let [r (io/read-json (receipt-path hour))]
+    (when-not (and (#{"deployed" "published"} (:state r))
+                   (string? (:commit r)) (re-matches #"[a-f0-9]{40}" (:commit r))
+                   (string? (:sha256 r)) (re-matches #"[a-f0-9]{64}" (:sha256 r))
+                   (string? (:version r)) (re-matches #"[a-f0-9-]{36}" (:version r)))
+      (throw (js/Error. "A deployed receipt with commit, version and SHA256 is required")))
+    (when-not (= "https://github.com/network-awai/fans-oppai.git"
+                 (.trim (command repo ["git" "remote" "get-url" "origin"])))
+      (throw (js/Error. "Unexpected repository")))
+    (let [image (cp/execFileSync "git"
+                  (clj->js ["show" (str (:commit r) ":public/img/producer-" hour ".png")])
+                  #js {:cwd repo :timeout 30000 :maxBuffer 16777216})
+          catalog (command repo ["git" "show" (str (:commit r) ":src/oppai/gen/catalog.cljk")])
+          deployments (js->clj (js/JSON.parse
+                                (command repo ["npx" "wrangler" "deployments" "list" "--json"]))
+                               :keywordize-keys true)]
+      (verification hour r deployments (sha image) catalog))))
+
+(defn audit-summary [posts]
+  (let [groups (fn [key] (->> posts (filter #(some? (key %))) (group-by key)
+                              (keep (fn [[value xs]] (when (> (count xs) 1)
+                                                      {:value value :count (count xs) :ids (mapv :id xs)})))
+                              (sort-by (juxt (comp - :count) :value)) vec))
+        phrases (->> posts (mapcat #(distinct (map (fn [s] (.trim s)) (.split (or (:prompt %) "") ","))))
+                     (remove empty?) frequencies
+                     (map (fn [[phrase n]] {:phrase phrase :count n}))
+                     (sort-by (juxt (comp - :count) :phrase)) (take 30) vec)]
+    {:post_count (count posts) :exact_image_duplicates (groups :actual_sha256)
+     :identical_prompts (groups :prompt) :repeated_prompt_phrases phrases
+     :artifact_mismatches (mapv :id (filter #(not= (:sha256 %) (:actual_sha256 %)) posts))
+     :posts posts :visual_similarity_verified false :browser_verified false
+     :public_image_fetch_verified false}))
+
+(defn audit! [repo limit]
+  (when-not (and (integer? limit) (<= 1 limit 100))
+    (throw (js/Error. "limit must be an integer from 1 to 100")))
+  (let [commit (.trim (command repo ["git" "rev-parse" "HEAD"]))
+        source (command repo ["git" "show" (str commit ":src/oppai/gen/catalog.cljk")])
+        start (.indexOf source "(def public-works")]
+    (when (< start 0) (throw (js/Error. "Catalog unavailable")))
+    (let [works (nth (reader/read-string (subs source start)) 2)
+          selected (->> works (filter #(re-matches #"producer-\d{8}T\d{2}Z" (or (:id %) "")))
+                        (sort-by :id) reverse (take limit))
+          posts (mapv (fn [w]
+                        (let [image (str "public/img/" (:id w) ".png")
+                              bytes (cp/execFileSync "git" (clj->js ["show" (str commit ":" image)])
+                                                    #js {:cwd repo :timeout 30000 :maxBuffer 16777216})]
+                          (assoc (select-keys w [:id :title :model :profile :prompt :sha256])
+                                 :actual_sha256 (sha bytes)
+                                 :url (str "https://oppai.fans/#post/" (:id w))))) selected)]
+      (assoc (audit-summary posts) :commit commit :checked_at (.toISOString (js/Date.))
+             :scope "Latest hourly catalog entries and image bytes at local Git commit; no live site or perceptual verification"
+             :limit limit))))

@@ -10,7 +10,7 @@
   bots/oppai-studio.edn and pass the same guard the Worker enforces.
 
   Install (operator Mac, the one with ssh to the fleet):
-    cp orgs/network-awai/fans-oppai/deploy/network.awai.bot.oppai-studio.plist ~/Library/LaunchAgents/
+    cp ~/github/network-awai/fans-oppai/deploy/network.awai.bot.oppai-studio.plist ~/Library/LaunchAgents/
     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/network.awai.bot.oppai-studio.plist
     launchctl kickstart -k gui/$(id -u)/network.awai.bot.oppai-studio
   Verify it loaded THIS definition (a bootstrap that returns is not proof):
@@ -63,7 +63,7 @@
 	<array>
 		<string>/bin/zsh</string>
 		<string>-c</string>
-		<string>cd "$COM_JUNKAWASAKI_ROOT/orgs/network-awai/fans-oppai" &amp;&amp; kbb --backend sci scripts/cljk_mirror.cljk &amp;&amp; exec kbb --backend sci --classpath .cljk-build/src:.cljk-build/scripts:../../kotoba-lang/text/src .cljk-build/scripts/oppai_studio_tick.cljs</string>
+		<string>cd "$HOME/github/network-awai/fans-oppai" &amp;&amp; "$HOME/github/kotoba-lang/kotoba/bin/kbb" --backend sci scripts/cljk_mirror.cljk &amp;&amp; exec "$HOME/github/kotoba-lang/kotoba/bin/kbb" --backend sci --classpath .cljk-build/src:.cljk-build/scripts:../../kotoba-lang/text/src .cljk-build/scripts/oppai_studio_tick.cljs</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
