@@ -14,6 +14,7 @@
   "src/oppai/gen/https.cljk" ".cljs"
   "test/oppai/gen/https_test.cljk" ".cljs"
   "scripts/producer_io.cljk" ".cljs"
+  "scripts/producer_health.cljk" ".cljs"
   "scripts/producer_tick.cljk" ".cljs"
   "test/producer_io_test.cljk" ".cljs"
   "test/support_worker_test.cljk" ".cljs"
