@@ -73,14 +73,19 @@
     (-> (js/Promise. (fn [resolve _] (js/setTimeout resolve 3000)))
         (.then (fn [_] (poll! (io/resume! (pub/receipt-path (:hour r)) io/request!) deadline))))
     (js/Promise.resolve r)))
+(defn pending-receipt? [r]
+  (or (#{"generated" "waiting" "submitting" "uncertain"} (:state r))
+      ;; Resume this runner's incomplete public verification, not historical
+      ;; deployed receipts from the old manual workflow and obsolete versions.
+      (and (= "deployed" (:state r)) (= "murakumo-native" (get-in r [:review :mode]))
+           (not (:public_image_fetch_verified r)))))
 (defn run! [repo]
   (fs/mkdirSync pub/root #js {:recursive true :mode 448})
   (let [lock (path/join pub/root "pipeline.lock") hour (utc-hour)]
     (fs/mkdirSync lock)
     (try
       (let [past (history)
-            pending (first (sort-by :hour (filter #(or (#{"generated" "waiting" "submitting" "uncertain"} (:state %))
-                                                     (and (= "deployed" (:state %)) (not (:public_image_fetch_verified %)))) past)))
+            pending (first (sort-by :hour (filter pending-receipt? past)))
             request (story/request past hour)
             r (if pending
                 (if (= "waiting" (:state pending)) (io/resume! (pub/receipt-path (:hour pending)) io/request!) pending)

@@ -60,4 +60,11 @@
                    (is (not (fs/existsSync (path/join dir "run.lock"))))))
           (.catch (fn [e] (is false (.-message e))))
           (.finally (fn [] (fs/rmSync dir #js {:recursive true}) (done)))))))
+(deftest historical-deployments-do-not-block-native-runner
+  (is (not (pipeline/pending-receipt? {:state "deployed"})))
+  (is (pipeline/pending-receipt? {:state "generated"}))
+  (is (pipeline/pending-receipt? {:state "waiting"}))
+  (is (pipeline/pending-receipt? {:state "deployed" :review {:mode "murakumo-native"}}))
+  (is (not (pipeline/pending-receipt? {:state "deployed" :review {:mode "murakumo-native"}
+                                    :public_image_fetch_verified true}))))
 (run-tests)
