@@ -20,7 +20,7 @@
                            (db/works-loaded works)
                            (db/navigate-fragment js/location.hash))
                  confirmed (db/confirm-age))
-           :fx (when confirmed [[:fleet/fetch nil] [:face/fetch nil] [:payments/fetch nil]])})))
+           :fx (when confirmed [[:fleet/fetch nil] [:face/fetch nil] [:payments/fetch nil] [:image/resume nil]])})))
 
      (rf/reg-event-fx
       :age/confirm
@@ -143,9 +143,9 @@
                       (fn [db [_ k v]]
                         (cond-> (assoc-in db [:image k] v)
                           (and (= k :free?) v
-                               (not (contains? #{"animagine-xl-4.0" "waiREALMIX_v11"}
-                                               (get-in db [:image :model]))))
-                          (assoc-in [:image :model] "animagine-xl-4.0"))))
+                               (not (some #(= (:model-id %) (get-in db [:image :model]))
+                                          (get-in db [:fleet :image]))))
+                          (assoc-in [:image :model] (:model-id (first (get-in db [:fleet :image])))))))
      (rf/reg-event-fx :work/remix
                       (fn [{:keys [db]} [_ id]]
                         {:db (db/remix-work db id)
@@ -178,7 +178,21 @@
                 (fn [body]
                   (net/submit-free-image!
                    {:body body :on-ok #(rf/dispatch [:image/free-result %])
+                    :on-progress #(rf/dispatch [:image/free-progress %])
                     :on-error #(rf/dispatch [:image/failed %])})))
+     (rf/reg-event-db :image/free-progress
+                      (fn [db [_ progress]]
+                        (-> db (assoc-in [:image :status] :running) (assoc-in [:image :fleet-progress] progress))))
+     (rf/reg-event-db :image/free-restored
+                      (fn [db [_ pending]]
+                        (update db :image merge {:prompt (:prompt pending) :model (:model pending)
+                                                 :free? true :publication-consent? true :status :running})))
+     (rf/reg-fx :image/resume
+                (fn [_] (when-let [pending (net/load-pending-image)]
+                          (rf/dispatch [:image/free-restored pending])
+                          (net/submit-free-image! {:on-ok #(rf/dispatch [:image/free-result %])
+                                                  :on-progress #(rf/dispatch [:image/free-progress %])
+                                                  :on-error #(rf/dispatch [:image/failed %])}))))
      (rf/reg-event-fx :image/free-result
                       (fn [{:keys [db]} [_ result]]
                         (let [next-db (db/free-image-result db result)]

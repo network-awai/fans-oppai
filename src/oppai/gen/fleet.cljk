@@ -92,7 +92,7 @@
   "Live image models, or the marked fallback when the map gave us none."
   [parsed]
   (let [live (:image parsed)]
-    (if (seq live) live fallback-image-models)))
+    (vec live)))
 
 ;; ---- image models from the generation node ------------------------------------
 
@@ -109,8 +109,8 @@
   offering LTX as an image model is a ComfyUI error the visitor cannot read."
   [m]
   (let [models (->> (or (:models m) [])
-                    (map (fn [{:keys [id file]}] {:model-id (str id) :label (str id)
-                                                  :checkpoint file :nodes [] :queue 0 :exact? true}))
+                    (map (fn [{:keys [id label file nodes ready replicas width height renderer]}] {:model-id (str id) :label (or label (str id)) :width width :height height :renderer renderer
+                                                  :checkpoint file :nodes (vec nodes) :ready ready :replicas replicas :queue 0 :exact? true}))
                     (remove #(re-find not-image-checkpoints (:model-id %)))
                     (sort-by :model-id)
                     vec)]
