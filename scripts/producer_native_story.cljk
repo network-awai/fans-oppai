@@ -64,7 +64,8 @@
                      (js/JSON.stringify (clj->js {:hour hour :candidate (:story request)
                                                  :published (mapv #(select-keys (:story %) [:index :episode :id :story_id :text])
                                                                   (take-last 8 (sort-by :hour (filter story/published? past))))})))
-          started (cli! ["itonami" "run" "--profile" (:bot_id c) "--input" input])]
+          started (cli! ["itonami" "run" "--profile" (:bot_id c) "--json-body"
+                         (js/JSON.stringify #js {:input input :response_mode "text-only"})])]
       (when-not (seq (:run_id started)) (throw (js/Error. "Native story run was not accepted")))
       (-> (poll! (:run_id started) (+ (.now js/Date) 240000) cli!)
           (.then (fn [status]
