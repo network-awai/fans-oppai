@@ -1,0 +1,91 @@
+(ns producer-pipeline
+  "One bounded story pass; publishing always uses the canonical stdio MCP."
+  (:require [producer-io :as io] [producer-publish :as pub] [producer-story :as story]
+            ["fs" :as fs] ["path" :as path] ["os" :as os] ["child_process" :as cp]))
+
+(defn environment [repo]
+  (let [e (js/Object.assign #js {} (.-env js/process))]
+    (js-delete e "NBB_CLJK_ROOTS") (aset e "OPPAI_REPO" repo) e))
+(defn mcp! [repo tool arguments]
+  (let [frames [{:jsonrpc "2.0" :id 1 :method "initialize" :params {:protocolVersion "2025-11-25" :capabilities {} :clientInfo {:name "oppai-native-runner" :version "1.0"}}}
+                {:jsonrpc "2.0" :method "notifications/initialized"}
+                {:jsonrpc "2.0" :id 2 :method "tools/call" :params {:name tool :arguments arguments}}]
+        input (str (.join (clj->js (map #(js/JSON.stringify (clj->js %)) frames)) "\n") "\n")
+        output (cp/execFileSync "/opt/homebrew/bin/kbb"
+                 #js ["--backend" "sci" "--classpath" "scripts:src" "scripts/producer_mcp.cljk"]
+                 #js {:cwd repo :env (environment repo) :input input :encoding "utf8" :timeout 600000 :maxBuffer 4194304})
+        response (some #(let [r (io/read-json-string %)] (when (= 2 (:id r)) r))
+                       (remove empty? (.split (.trim output) "\n")))
+        result (:result response)]
+    (when (or (nil? response) (:error response) (:isError result))
+      (throw (js/Error. (str "MCP " tool " failed: " (or (get-in response [:error :message]) (get-in result [:content 0 :text]))))))
+    (io/read-json-string (get-in result [:content 0 :text]))))
+
+(defn history []
+  (when (fs/existsSync pub/root)
+    (vec (keep (fn [hour]
+                 (when (re-matches #"\d{8}T\d{2}Z" hour)
+                   (let [p (pub/receipt-path hour)] (when (fs/existsSync p) (io/read-json p)))))
+               (js->clj (fs/readdirSync pub/root))))))
+(defn utc-hour []
+  (let [iso (.toISOString (js/Date.))]
+    (str (.replaceAll (subs iso 0 10) "-" "") "T" (subs iso 11 13) "Z")))
+(defn active-version [repo]
+  (let [deployments (io/read-json-string (pub/command repo ["node_modules/.bin/wrangler" "deployments" "list" "--json"]))
+        versions (:versions (last (sort-by :created_on deployments)))]
+    (when-not (and (= 1 (count versions)) (= 100 (:percentage (first versions))))
+      (throw (js/Error. "A single active deployment is required")))
+    (:version_id (first versions))))
+(defn verify-public! [repo hour]
+  (let [verified (mcp! repo "producer_verify_post" {:hour hour})
+        rp (pub/receipt-path hour) r (io/read-json rp)]
+    (when-not (every? true? (vals (:checks verified)))
+      (throw (js/Error. "MCP deployment verification failed")))
+    (-> (js/fetch (str "https://oppai.fans/img/producer-" hour ".png")
+                  #js {:redirect "error" :headers #js {"user-agent" io/user-agent}
+                       :signal (.timeout js/AbortSignal 30000)})
+        (.then (fn [res] (when-not (.-ok res) (throw (js/Error. "Public PNG unavailable"))) (.arrayBuffer res)))
+        (.then (fn [bytes]
+                 (when-not (= (:sha256 r) (pub/sha (js/Buffer.from bytes)))
+                   (throw (js/Error. "Public PNG hash mismatch")))
+                 (let [next (assoc r :public_image_fetch_verified true :mcp_verified true
+                                    :verification verified :updated_at (.toISOString (js/Date.)))]
+                   ;; Browser rendering remains a separate verification; never fabricate it.
+                   (when-not (= r (io/read-json rp)) (throw (js/Error. "Receipt changed during public verification")))
+                   (io/save! rp next)
+                   (assoc (select-keys next [:state :url :version :sha256 :story]) :hour hour :review_mode (get-in next [:review :mode])
+                          :browser_verified (true? (:browser_verified next)) :public_image_fetch_verified true)))))))
+(defn finish! [repo r]
+  (let [hour (:hour r)]
+    (cond
+      (#{"deployed" "published"} (:state r)) (verify-public! repo hour)
+      (= "rejected" (:state r)) (js/Promise.resolve {:hour hour :state "rejected" :review_mode "murakumo-native"})
+      (= "generated" (:state r))
+      (let [review (mcp! repo "producer_review" {:hour hour})]
+        (if (= "rejected" (:state review)) (js/Promise.resolve review)
+          (do
+            (when-not (:reviewed review) (throw (js/Error. "Native visual review held the image; no publication")))
+            (mcp! repo "producer_publish" {:hour hour :sha256 (:sha256 review) :expected_version (active-version repo)})
+            (verify-public! repo hour))))
+      :else (throw (js/Error. (str "Accepted generation remains " (:state r) "; preserved UUID and response"))))))
+(defn poll! [r deadline]
+  (if (and (= "waiting" (:state r)) (< (.now js/Date) deadline))
+    (-> (js/Promise. (fn [resolve _] (js/setTimeout resolve 3000)))
+        (.then (fn [_] (poll! (io/resume! (pub/receipt-path (:hour r)) io/request!) deadline))))
+    (js/Promise.resolve r)))
+(defn run! [repo]
+  (fs/mkdirSync pub/root #js {:recursive true :mode 448})
+  (let [lock (path/join pub/root "pipeline.lock") hour (utc-hour)]
+    (fs/mkdirSync lock)
+    (try
+      (let [past (history)
+            pending (first (sort-by :hour (filter #(or (#{"generated" "waiting" "submitting" "uncertain"} (:state %))
+                                                     (and (= "deployed" (:state %)) (not (:public_image_fetch_verified %)))) past)))
+            request (story/request past hour)
+            r (if pending
+                (if (= "waiting" (:state pending)) (io/resume! (pub/receipt-path (:hour pending)) io/request!) pending)
+                (io/run! pub/root hour request io/request!))]
+        (-> (poll! r (+ (.now js/Date) 180000))
+            (.then #(finish! repo %))
+            (.finally #(fs/rmdirSync lock))))
+      (catch :default e (fs/rmdirSync lock) (throw e)))))

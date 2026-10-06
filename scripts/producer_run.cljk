@@ -1,0 +1,6 @@
+(require '[producer-pipeline :as pipeline])
+(try
+  (-> (pipeline/run! (.cwd js/process))
+      (.then #(println (js/JSON.stringify (clj->js %))))
+      (.catch (fn [e] (.error js/console (.-message e)) (set! (.-exitCode js/process) 1))))
+  (catch :default e (.error js/console (.-message e)) (set! (.-exitCode js/process) 1)))
