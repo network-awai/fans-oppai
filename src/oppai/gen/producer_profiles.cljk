@@ -150,7 +150,12 @@
     :cue "adult woman, moaning, blush, half-closed eyes, adult man"}
   ])
 
-(defn by-id [id] (some #(when (= id (:id %)) %) profiles))
+(def story-profile
+  {:id "story-aoi-harbor" :keyword "葵の港町の旅" :category "ストーリー"
+   :cue "fictional adult woman age 32, short black bob hair, brown eyes, navy coat, cream scarf, fully clothed, harbor town"})
+(defn by-id [id]
+  (if (= id (:id story-profile)) story-profile
+      (some #(when (= id (:id %)) %) profiles)))
 (defn prompt [profile n]
   ;; Explicit profiles (owner-reviewed 2026-09-22) are consenting-fictional-adult
   ;; scenes; the studio bot banks (:act in bots/oppai-studio.edn) set the
