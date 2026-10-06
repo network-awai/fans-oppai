@@ -1,7 +1,7 @@
 {;; Sources are canonical .cljk (cljk-origin.edn); shadow-cljs and the JVM read the
  ;; derived tree `npm run cljk` writes (scripts/cljk_mirror.cljk). Temporary until a
  ;; .cljk host loader exists (com-junkawasaki/root#3093).
- :paths [".cljk-build/src"]
+ :paths [".cljk-build/src" ".cljk-build/dds/src"]
  :deps
  {
         ;; kotoba.io replaced clojure.java.io / java.io.File here (2026-09-24).

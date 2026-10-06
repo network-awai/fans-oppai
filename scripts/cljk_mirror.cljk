@@ -26,7 +26,8 @@
 (ns cljk-mirror
   (:require ["node:fs" :as fs]
             ["node:path" :as path]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            ["node:child_process" :as cp]))
 
 (def out-root ".cljk-build")
 (def roots ["src" "test" "scripts"])
@@ -38,6 +39,22 @@
                 (if (.isDirectory (fs/statSync p)) (walk p) [p])))
             (fs/readdirSync dir))
     []))
+
+(defn mirror-design-dependency! []
+  ;; Resolve the declared immutable Git dependency, then derive its canonical
+  ;; extensions into this checkout. Never mutate the shared Git dependency.
+  (let [classpath (.toString (cp/execFileSync "clojure" #js ["-Spath"] #js {:timeout 120000}))
+        source (first (filter #(and (.includes % "/jp-go-dds/") (.endsWith % "/src"))
+                              (.split classpath path/delimiter)))]
+    (when-not source (throw (js/Error. "Declared jp-go-dds dependency is missing")))
+    (let [root (path/dirname (.trim source))
+          origins (:origins (reader/read-string (fs/readFileSync (path/join root "cljk-origin.edn") "utf8")))]
+      (doseq [f (filter #(.endsWith % ".cljk") (walk (path/join root "src")))]
+        (let [relative (path/relative root f) ext (get origins relative)]
+          (when-not ext (throw (js/Error. (str "Missing dependency origin: " relative))))
+          (let [target (path/join out-root "dds" (str (subs relative 0 (- (count relative) 5)) ext))]
+            (fs/mkdirSync (path/dirname target) #js {:recursive true})
+            (fs/copyFileSync f target)))))))
 
 (defn -main []
   (let [origins (:origins (reader/read-string (fs/readFileSync "cljk-origin.edn" "utf8")))
@@ -52,6 +69,7 @@
       (let [target (path/join out-root (str (subs f 0 (- (count f) 5)) (get origins f)))]
         (fs/mkdirSync (path/dirname target) #js {:recursive true})
         (fs/copyFileSync f target)))
+    (mirror-design-dependency!)
     ;; non-source files the scripts read relative to themselves stay where
     ;; they are; only Clojure source is mirrored.
     (println (str "cljk-mirror: " (count files) " file(s) -> " out-root "/"))))
