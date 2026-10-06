@@ -95,7 +95,6 @@ mcp_servers:
     timeout: 600
 platform_toolsets:
   cron:
-  script_timeout_seconds: 1200
   - terminal
   - file
   - vision
