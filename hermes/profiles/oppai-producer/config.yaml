@@ -80,7 +80,8 @@ cron:
   script_timeout_seconds: 1200
   max_parallel_jobs: 12
   bot_chat_delivery_timeout_seconds: 900
-_config_version: 45
+  script_timeout_seconds: 1200
+_config_version: 46
 mcp_servers:
   oppai-producer:
     command: /opt/homebrew/bin/kbb
@@ -88,11 +89,13 @@ mcp_servers:
     - --backend
     - sci
     - --classpath
-    - /Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts:/Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/src
-    - /Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts/producer_mcp.cljk
+    - ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts:~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/src
+    - ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts/producer_mcp.cljk
     env:
-      OPPAI_REPO: /Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai
+      OPPAI_REPO: ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai
     timeout: 600
+gateway:
+  cron_only: true
 platform_toolsets:
   cron:
   - terminal
