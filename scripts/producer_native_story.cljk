@@ -5,14 +5,32 @@
 
 (defn config []
   (io/read-json (path/join (os/homedir) ".hermes/profiles/oppai-producer/native-bot.json")))
-(defn cli! [args]
+(defn invoke-cli! [args]
   (let [env (js/Object.assign #js {} (.-env js/process))]
     (js-delete env "NBB_CLJK_ROOTS")
+    (js-delete env "CLOUD_ITONAMI_MCP_SESSION")
+    (aset env "CLOUD_ITONAMI_AUTH_KIND" "agent")
     (aset env "CLOUD_ITONAMI_API_URL" "http://127.0.0.1:1338")
     (io/read-json-string
      (cp/execFileSync (path/join (os/homedir) ".local/bin/itonami")
                      (clj->js (conj (vec args) "--json"))
                      #js {:env env :encoding "utf8" :timeout 30000 :maxBuffer 4194304}))))
+
+(defn cli! [args]
+  (try (invoke-cli! args)
+       (catch :default e
+         ;; A definitive 401 is refused before run creation. Never resend a
+         ;; timed-out/uncertain POST or a model failure. Refresh the existing
+         ;; owner agent session without borrowing a human session or logging it.
+         (if (and (= 1 (.-status e)) (not= "auth" (first args))
+                  (re-find #"status[\s\":]+401" (str (.-stderr e))))
+           (do
+             (let [session (try (invoke-cli! ["auth" "login" "--label" "oppai-native-story"])
+                                (catch :default _ (throw (js/Error. "Native Itonami agent refresh failed"))))]
+               (when-not (= "stored" (:keychain session))
+                 (throw (js/Error. "Native Itonami agent refresh was not stored"))))
+             (invoke-cli! args))
+           (throw e)))))
 
 (defn native-health? [configuration response]
   (and (seq (:bot_id configuration)) (seq (:store configuration))

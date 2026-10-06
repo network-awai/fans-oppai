@@ -19,6 +19,32 @@
     (is (thrown? js/Error (n/verified-receipt c r "20261006T13Z" bad detail))))
   (doseq [[field value] [[:provider "openrouter"] [:model "other"] [:id "other-run"] [:state "failed"] [:tool-count 1]]]
     (is (thrown? js/Error (n/verified-receipt c r "20261006T13Z" status (assoc-in detail [:turn field] value))))))
+(deftest refresh-only-definitively-refused-authentication
+  (let [calls (atom [])]
+    (with-redefs [n/invoke-cli! (fn [args]
+                                (swap! calls conj args)
+                                (case (count @calls)
+                                  1 (throw (doto (js/Error. "refused") (aset "status" 1) (aset "stderr" ":status 401")))
+                                  2 {:keychain "stored" :token "test-secret-only"}
+                                  3 {:run_id "accepted-once"}))]
+      (is (= {:run_id "accepted-once"} (n/cli! ["itonami" "run"])))
+      (is (= [["itonami" "run"] ["auth" "login" "--label" "oppai-native-story"] ["itonami" "run"]] @calls))))
+  (doseq [failure [(doto (js/Error. "uncertain timeout") (aset "code" "ETIMEDOUT"))
+                   (doto (js/Error. "forbidden") (aset "status" 1) (aset "stderr" ":status 403"))]]
+    (let [calls (atom 0)]
+      (with-redefs [n/invoke-cli! (fn [_] (swap! calls inc) (throw failure))]
+        (is (thrown? js/Error (n/cli! ["itonami" "run"])))
+        (is (= 1 @calls)))))
+  (let [calls (atom 0)]
+    (with-redefs [n/invoke-cli! (fn [_]
+                                (swap! calls inc)
+                                (if (= 1 @calls)
+                                  (throw (doto (js/Error. "refused") (aset "status" 1) (aset "stderr" ":status 401")))
+                                  (throw (js/Error. "test-secret-only"))))]
+      (let [message (try (n/cli! ["itonami" "run"]) nil (catch :default e (.-message e)))]
+        (is (= "Native Itonami agent refresh failed" message))
+        (is (not (.includes message "test-secret-only")))))))
+
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
 (run-tests)
