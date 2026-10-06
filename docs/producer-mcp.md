@@ -89,3 +89,11 @@ canonical story producer takes over, avoiding independent direct ComfyUI work
 and separate completion ledgers. Hermes residents are represented in the
 existing Itonami bots status publisher; that status bridge is distinct from
 a native Itonami Bot execution service and must be verified separately.
+
+### Runtime qualification, 2026-10-06
+
+The canonical health probe is `kbb --backend sci --classpath scripts:src scripts/producer_health.cljk --run`. The existing scheduler measurement job now runs this read-only probe without an LLM; the legacy direct-ComfyUI submission is paused. The producer conversational model is pinned to Murakumo `mishima` with bounded turns/time; image execution remains the fleet image-job API. External conversational fallback is disabled so failed admission remains visible.
+
+The first story image was generated on zebulun, visually reviewed, published and displayed at `#post/producer-20261006T08Z` (528×528). The next plan carries Aoi into discovery. Exact facial identity is not yet measured.
+
+Native Itonami Bot execution remains unqualified: local1338 is a sign-in-only server and refuses `/api/agent-bots`. The signed public status projection requires two independent public proofs; its gad8445 source is unreachable while gad is offline, though Jacob and Xavier Tailnet proofs are healthy. Hermes execution must not be labelled native Itonami execution.

@@ -24,7 +24,7 @@ moa:
 model:
   provider: murakumo
   base_url: https://api.murakumo.cloud/v1
-  default: murakumo/free
+  default: mishima
   max_tokens: 8192
   context_length: 131072
 providers:
@@ -32,11 +32,14 @@ providers:
     base_url: https://api.murakumo.cloud/v1
     api_mode: chat_completions
     models:
+      mishima:
+        context_length: 131072
+        max_tokens: 2048
       nex-n2.5-mini-uncensored:
         context_length: 65536
         max_tokens: 8192
     stale_timeout_seconds: 600
-    request_timeout_seconds: 900
+    request_timeout_seconds: 150
     extra_headers:
       HTTP-Referer: https://itonami.cloud
       X-OpenRouter-Title: Itonami By KotobaLabs
@@ -64,17 +67,14 @@ providers:
     api_mode: chat_completions
     key_env: KOTOBA_API_TOKEN
     stale_timeout_seconds: 600
-    request_timeout_seconds: 900
+    request_timeout_seconds: 150
     models:
       qwen3.8-flash-next-whitehacker:
         context_length: 131072
-fallback_providers:
-  - provider: openrouter-free
-    model: z-ai/glm-5.3-flash
-    base_url: https://openrouter.ai/api/v1
+fallback_providers: []
 agent:
-  max_turns: 500
-  run_budget_seconds: 1200
+  max_turns: 60
+  run_budget_seconds: 600
 openrouter:
   response_cache: true
   response_cache_ttl: 300
