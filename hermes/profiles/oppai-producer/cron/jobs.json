@@ -2,6 +2,9 @@
   "jobs": [
     {
       "base_url": null,
+      "context_from": [
+        "self"
+      ],
       "deliver": "local",
       "enabled": true,
       "enabled_toolsets": null,
@@ -19,7 +22,7 @@
       "script": "producer_pipeline.sh",
       "skill": null,
       "skills": [],
-      "workdir": "/Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai"
+      "workdir": null
     }
   ]
 }
