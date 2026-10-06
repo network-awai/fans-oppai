@@ -11,3 +11,5 @@ public/index.html
 target/
 .cljk-build/
 .nbb/
+
+node_modules
