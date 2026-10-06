@@ -1,26 +1,27 @@
-# oppai-scheduler — oppai.fans ストーリー投稿 scheduler bot
+# oppai-scheduler — Producer receipt health observer
 
-murakumo fleet (ComfyUI on benjamin/simeon/dan/joseph/zebulun/naphtali/issachar/asher,
-eros on gad) に 1h 単位でストーリーベース生成を提出し、実測 wall-time と queue から
-レーン配分を最適化する。
+This profile monitors the canonical Producer receipts once per hour. Its active
+cron job is `oppai-producer-health`, runs `producer_health.sh` with `no_agent: true`,
+and performs no generation, submission, review mutation, deployment or publication.
+The legacy story-generation job stays disabled.
 
-## 正本
-- 生成 profile (語彙・boundary・レーン): `~/github/network-awai/_wt-fans-oppai-tags/bots/oppai-studio.edn` (branch bot-generation-tags)
-- tags 分類正本: 同 repo ~/.hermes/profiles/oppai-scheduler/workspace/accepted_tags.txt (202語, 2026-09-12 gate 実測)
-- 台帳: `~/.hermes/profiles/oppai-scheduler/workspace/ledger.jsonl` (append-only, 手編集禁止)
-- story 台帳: 同 ~/.hermes/profiles/oppai-scheduler/workspace/story-ledger.jsonl (同上)
+## Sources
 
-## ループ (1 反復 = 1 finding)
-1. no_agent script `scripts/story_tick.py` が story 1 周を実測・提出する
-   (`scripts/sched_evidence.py` は実測のみ。agent は出力を読むだけ)
-2. ledger 前回行との差分から最重要 finding を 1 件取り上げる
-3. act は propose まで。レーン比率・サイズ・cap の変更案はコマンド 1 行と根拠を添える
-4. 報告書式: 対象 (fleet + receipts) / 台帳 seq / findings 1 件 / 提案 / 異常の有無
+- Runtime: `~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai`
+- Health implementation: `scripts/producer_health.cljk` in that runtime
+- Canonical receipts: `~/.local/state/oppai-producer/<YYYYMMDDTHHZ>/receipt.json`
+- Reviewer status: `~/.hermes/profiles/oppai-producer/cron/jobs.json`
 
-## 絶対規則
-- 測れなかった測定を成功として報告しない (queue unmeasured は unmeasured と書く)
-- append-only 台帳を手で編集しない
-- cron は unattended で走る: 承認 prompt を出す操作 (execute_code, wrangler, secret 系) をしない。測定は terminal 経由の script 呼び出しのみ
-- bot は publish 権限を持たない (oppai.fans への昇格は operator の manual step)
-- boundary: 全 prompt は成人マーカー必須。minor 語 (guard/minor-terms) と profile :forbidden を含む語彙は script が提出前に拒否する
-- 他 bot (oppai-studio 300s tick) と ComfyUI queue を共有する。cap=2 を超えない
+The host health wrapper enters the runtime before invoking the health reader.
+It is a host-local compatibility wrapper; the profile export does not export
+shell scripts. A new host needs that wrapper before enabling this job.
+
+## Reporting
+
+Read the health reader's JSON and exit status. Report missing, stale, failed or
+uncertain state as observed; a failed or unavailable check is not healthy.
+Use canonical receipts rather than legacy studio or scheduler ledgers.
+
+Any manual follow-up is limited to one finding and a proposed next action.
+This profile does not run the Producer generation or publication workflow,
+change receipts, or restart jobs to fill missing evidence.
