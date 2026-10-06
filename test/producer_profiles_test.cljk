@@ -1,0 +1,45 @@
+(ns producer-profiles-test
+  (:require [oppai.gen.producer-profiles :as p]
+            [cljs.test :as t :refer [deftest is run-tests]]))
+(deftest balanced-rounds
+  ;; The hourly chooser is restricted to non-explicit profiles: the automation
+  ;; publishes a non-explicit, fully-clothed gallery and explicit profiles would
+  ;; otherwise never earn a success and clog the front of the sort. Rotation must
+  ;; therefore stay fair over the eligible set.
+  (let [eligible (remove :explicit? p/profiles)
+        n (count eligible)
+        history (reduce (fn [xs i]
+                          (conj xs {:profile (:id (p/choose xs)) :state "published"
+                                    :hour (str (+ 10000 i))})) [] (range (* 3 n)))
+        counts (frequencies (map :profile history))]
+    (is (= n (count counts)))
+    (is (every? #(= 3 %) (vals counts)))
+    (is (= (count eligible) (count (set (map :id eligible)))))
+    (is (every? #(contains? (set (map :id p/profiles)) %) (map :id eligible)))))
+(deftest chooser-excludes-explicit
+  ;; Explicit profiles stay listed for review/manual briefs but must never be
+  ;; picked by the balanced hourly chooser.
+  (is (pos? (count (filter :explicit? p/profiles))))
+  (is (= (count p/profiles)
+         (+ (count (filter :explicit? p/profiles))
+            (count (remove :explicit? p/profiles)))))
+  (is (not-any? :explicit? (repeatedly 60 #(p/choose [])))))
+(deftest failed-attempt-rotates
+  (let [first-id (:id (p/choose []))]
+    (is (not= first-id (:id (p/choose [{:profile first-id :state "skipped" :hour "20260912T05Z"}]))))
+    (is (not= first-id (:id (p/choose [{:profile first-id :state "generated" :hour "20260912T05Z"}]))))))
+(deftest reviewed-briefs
+  (is (nil? (p/by-id "unknown")))
+  (is (every? #(< (count (p/prompt % 0)) 2000) p/profiles))
+  ;; Non-explicit profiles keep the fully-clothed floor verbatim.
+  (is (every? #(re-find #"adult age 32, fully clothed" (p/prompt % 0))
+              (remove :explicit? p/profiles)))
+  ;; Explicit profiles (owner-reviewed 2026-09-22) name a fictional adult and
+  ;; the explicit rating; they must NOT carry the non-explicit floor (a
+  ;; contradiction a model would have to guess its way out of).
+  (is (every? #(re-find #"adult woman" (p/prompt % 0)) (filter :explicit? p/profiles)))
+  (is (every? #(re-find #"rating:explicit" (p/prompt % 0)) (filter :explicit? p/profiles)))
+  (is (not-any? #(re-find #"non-explicit" (p/prompt % 0)) (filter :explicit? p/profiles))))
+(defmethod t/report [:cljs.test/default :end-run-tests] [m]
+  (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
+(run-tests)
