@@ -1,10 +1,15 @@
 (ns producer-tick
-  (:require [producer-io :as p] ["os" :as os] ["path" :as path]))
-
+  (:require [producer-io :as p] [producer-story :as story]
+            ["fs" :as fs] ["os" :as os] ["path" :as path]))
 (let [input (first *command-line-args*)
       iso (.toISOString (js/Date.))
-      hour (str (.replaceAll (subs iso 0 10) "-" "") "T" (subs iso 11 13) "Z")]
-  (when-not input (throw (js/Error. "Usage: kbb --backend sci --classpath scripts scripts/producer_tick.cljk request.json")))
-  (println (js/JSON.stringify
-            (clj->js (p/run! (path/join (os/homedir) ".local/state/oppai-producer")
-                             hour (p/read-json input) p/request!)))))
+      hour (str (.replaceAll (subs iso 0 10) "-" "") "T" (subs iso 11 13) "Z")
+      root (path/join (os/homedir) ".local/state/oppai-producer")
+      history (when (fs/existsSync root)
+                (keep (fn [name] (let [r (path/join root name "receipt.json")]
+                                  (when (fs/existsSync r) (p/read-json r))))
+                      (js->clj (fs/readdirSync root))))
+      request (if (#{"--balanced" "--story" "--plan"} input) (story/request history hour)
+                  (when input (p/read-json input)))]
+  (when-not request (throw (js/Error. "Usage: producer_tick.cljk --story|--plan|request.json")))
+  (println (js/JSON.stringify (clj->js (if (= "--plan" input) request (p/run! root hour request p/request!))))))
