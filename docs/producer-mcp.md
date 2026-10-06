@@ -101,3 +101,7 @@ Native Itonami Bot execution remains unqualified: local1338 is a sign-in-only se
 ### Review hold
 
 Automated visual review is currently held: mishima timed out / no_ready_capacity, and is text-only in the live catalog. The existing job now executes only its canonical submission/poll script; generation receipts persist and unreviewed images cannot be published. Health reports manual-review. Switching review images and prompts to OpenRouter requires explicit approval for that payload and recipient, as automatic approval review rejected this change. No routing change was applied.
+
+### Murakumo-only policy
+
+The owner explicitly forbids OpenRouter (2026-10-06). Producer provider, auxiliary calls and disabled MoA references are pinned to Murakumo mishima; only the Murakumo provider is configured and fallback is empty. Do not use murakumo/free: its catalog advertises external OpenRouter routing. The current catalog exposes mishima as text-only and no qualified visual model. Visual review remains held, no-agent submission/polling continues, and unreviewed images cannot publish. A Murakumo-native vision model must pass real image review before unattended publication resumes. This is not a request for external-provider approval.
