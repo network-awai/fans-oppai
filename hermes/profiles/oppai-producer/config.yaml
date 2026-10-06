@@ -3,28 +3,28 @@ moa:
   presets:
     default:
       reference_models:
-        - provider: kotoba
-          model: qwen3.8-27b-whitehacker
-          enabled: true
+      - provider: murakumo
+        model: mishima
+        enabled: false
       degraded_reference_policy: loud
       fanout: user_turn
       aggregator:
-        provider: kotoba
-        model: qwen3.8-27b-whitehacker
+        provider: murakumo
+        model: mishima
   reference_models:
-    - provider: kotoba
-      model: qwen3.8-27b-whitehacker
-      enabled: true
+  - provider: murakumo
+    model: mishima
+    enabled: false
   aggregator:
-    provider: kotoba
-    model: qwen3.8-27b-whitehacker
+    provider: murakumo
+    model: mishima
   degraded_reference_policy: loud
   fanout: user_turn
-  enabled: true
+  enabled: false
 model:
   provider: murakumo
   base_url: https://api.murakumo.cloud/v1
-  default: murakumo/free
+  default: mishima
   max_tokens: 8192
   context_length: 131072
 providers:
@@ -34,102 +34,71 @@ providers:
     models:
       mishima:
         context_length: 131072
-        max_tokens: 1024
-      nex-n2.5-mini-uncensored:
-        context_length: 65536
-        max_tokens: 8192
+        max_tokens: 2048
+      qwen3-vl-2b-instruct:
+        context_length: 4096
+        max_tokens: 512
     stale_timeout_seconds: 600
-    request_timeout_seconds: 900
+    request_timeout_seconds: 150
     extra_headers:
       HTTP-Referer: https://itonami.cloud
-      X-OpenRouter-Title: Itonami By KotobaLabs
       X-Title: Itonami By KotobaLabs
     key_env: MURAKUMO_API_TOKEN
-  openrouter-free:
-    base_url: https://openrouter.ai/api/v1
-    api_mode: chat_completions
-    key_env: OPENROUTER_API_KEY
-    stale_timeout_seconds: 600
-    extra_headers:
-      HTTP-Referer: https://itonami.cloud
-      X-OpenRouter-Title: Itonami By KotobaLabs
-      X-Title: Itonami By KotobaLabs
-  custom:
-    models:
-      glm-5.3-flash-cybersecurity-w4a16:
-        stale_timeout_seconds: 2400
-        timeout_seconds: 2400
-      qwen3.8-flash-next-cybersecurity-nvfp4:
-        stale_timeout_seconds: 2000
-        timeout_seconds: 2000
-  kotoba:
-    base_url: https://api.kotoba.cloud/v1
-    api_mode: chat_completions
-    key_env: KOTOBA_API_TOKEN
-    stale_timeout_seconds: 600
-    request_timeout_seconds: 900
-    models:
-      qwen3.8-flash-next-whitehacker:
-        context_length: 131072
-fallback_providers:
-  - provider: murakumo
-    model: mishima
-    base_url: https://api.murakumo.cloud/v1
-  - provider: openrouter-free
-    model: z-ai/glm-5.3-flash
-    base_url: https://openrouter.ai/api/v1
+fallback_providers: []
 agent:
-  max_turns: 500
-  run_budget_seconds: 1200
-openrouter:
-  response_cache: true
-  response_cache_ttl: 300
+  max_turns: 60
+  run_budget_seconds: 600
 auxiliary:
   free_only: true
   vision:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: qwen3-vl-2b-instruct
   compression:
-    provider: kotoba
-    model: qwen3.8-flash-next-whitehacker
+    provider: murakumo
+    model: mishima
   skills_hub:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: mishima
   approval:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: mishima
   mcp:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: mishima
   title_generation:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: mishima
   triage_specifier:
-    provider: auto
-    model: ''
+    provider: murakumo
+    model: mishima
   web_extract:
     base_url: https://api.kotoba.cloud/v1
-    model: qwen3.8-flash-next-whitehacker
-    provider: kotoba
+    model: mishima
+    provider: murakumo
 plugins:
   enabled: []
 cron:
   max_parallel_jobs: 12
   bot_chat_delivery_timeout_seconds: 900
+  script_timeout_seconds: 1200
 _config_version: 46
 mcp_servers:
   oppai-producer:
     command: /opt/homebrew/bin/kbb
     args:
-      - --backend
-      - sci
-      - --classpath
-      - /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/scripts:/private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/src
-      - /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai/scripts/producer_mcp.cljk
+    - --backend
+    - sci
+    - --classpath
+    - ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts:~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/src
+    - ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai/scripts/producer_mcp.cljk
     env:
-      OPPAI_REPO: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
+      OPPAI_REPO: ~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai
     timeout: 600
-
-
 gateway:
   cron_only: true
+platform_toolsets:
+  cron:
+  - terminal
+  - file
+  - vision
+  - mcp-oppai-producer
