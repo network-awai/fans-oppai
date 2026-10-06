@@ -29,7 +29,9 @@
         result (assoc generation :generation_status (:status generation)
                       :review_last_status (:last_status reviewer)
                       :review_last_run_at (:last_run_at reviewer)
-                      :status (cond (nil? reviewer) "missing-reviewer"
+                      :review_mode (if (:no_agent reviewer) "manual" "agent")
+                      :status (cond (:no_agent reviewer) "manual-review"
+                                    (nil? reviewer) "missing-reviewer"
                                     (= "error" (:last_status reviewer)) "review-attention"
                                     :else (:status generation)))]
     (println (js/JSON.stringify (clj->js result)))

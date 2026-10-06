@@ -97,3 +97,7 @@ The canonical health probe is `kbb --backend sci --classpath scripts:src scripts
 The first story image was generated on zebulun, visually reviewed, published and displayed at `#post/producer-20261006T08Z` (528×528). The next plan carries Aoi into discovery. Exact facial identity is not yet measured.
 
 Native Itonami Bot execution remains unqualified: local1338 is a sign-in-only server and refuses `/api/agent-bots`. The signed public status projection requires two independent public proofs; its gad8445 source is unreachable while gad is offline, though Jacob and Xavier Tailnet proofs are healthy. Hermes execution must not be labelled native Itonami execution.
+
+### Review hold
+
+Automated visual review is currently held: mishima timed out / no_ready_capacity, and is text-only in the live catalog. The existing job now executes only its canonical submission/poll script; generation receipts persist and unreviewed images cannot be published. Health reports manual-review. Switching review images and prompts to OpenRouter requires explicit approval for that payload and recipient, as automatic approval review rejected this change. No routing change was applied.

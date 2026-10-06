@@ -8,7 +8,7 @@
       "id": "f07848c63ecb",
       "model": "mishima",
       "name": "oppai-producer-hourly",
-      "no_agent": false,
+      "no_agent": true,
       "prompt": "## Objective\n成人の架空キャラクターの連続ストーリーを、無料GPU生成・実画像レビュー・MCP投稿・公開確認まで進める。\n\nSOUL.mdのstory Producer手順を一回実行。共有receiptを正本とし、受付済みUUIDはGETで再開、UTC時帯あたり新規POSTは最大1件。画像生成・投稿失敗は[CRON_FAILURE]、待機は未完了。ストーリー状態を勝手に進めない。新規外部メッセージは禁止。",
       "provider": "murakumo",
       "schedule": {
