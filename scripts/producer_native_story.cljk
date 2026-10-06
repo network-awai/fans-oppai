@@ -1,0 +1,72 @@
+(ns producer-native-story
+  "Fail-closed native Itonami story validation; publication retains its existing authority."
+  (:require [producer-io :as io] [producer-story :as story] ["os" :as os] ["path" :as path]
+            ["child_process" :as cp]))
+
+(defn config []
+  (io/read-json (path/join (os/homedir) ".hermes/profiles/oppai-producer/native-bot.json")))
+(defn cli! [args]
+  (let [env (js/Object.assign #js {} (.-env js/process))]
+    (js-delete env "NBB_CLJK_ROOTS")
+    (aset env "CLOUD_ITONAMI_API_URL" "http://127.0.0.1:1338")
+    (io/read-json-string
+     (cp/execFileSync (path/join (os/homedir) ".local/bin/itonami")
+                     (clj->js (conj (vec args) "--json"))
+                     #js {:env env :encoding "utf8" :timeout 30000 :maxBuffer 4194304}))))
+
+(defn native-health? [configuration response]
+  (and (seq (:bot_id configuration)) (seq (:store configuration))
+       (= "cloud-itonami-app" (get-in response [:health :service]))
+       (= (:store configuration) (get-in response [:health :store]))
+       (true? (:answering? response))))
+
+(defn parse-decision [text]
+  (let [text (.trim (str text))
+        text (if (.startsWith text "```")
+               (.replace text #"^```(?:json)?\s*([\s\S]*?)\s*```$" "$1") text)]
+    (io/read-json-string text)))
+
+(defn verified-receipt [configuration request hour status detail]
+  (let [turn (:turn detail) decision (parse-decision (:output status))]
+    (when-not (and (= "completed" (:status status))
+                   (= (:bot_id configuration) (:session_id status))
+                   (= (:run_id status) (:id turn))
+                   (= "completed" (:state turn)) (= "murakumo" (:provider turn))
+                   (= "mishima" (:model turn)) (= 0 (:tool-count turn))
+                   (true? (:approved decision)) (= hour (:hour decision))
+                   (= (get-in request [:story :story_id]) (:story_id decision))
+                   (= (get-in request [:story :index]) (:index decision))
+                   (string? (:reason decision)) (<= 1 (count (:reason decision)) 800))
+      (throw (js/Error. "Native Itonami story validation did not qualify")))
+    {:mode "itonami-native-bot" :bot_id (:bot_id configuration)
+     :run_id (:run_id status) :turn_id (:id turn)
+     :provider (:provider turn) :model (:model turn)
+     :served_node_did (:served-node-did turn) :decision decision
+     :validated_at (.toISOString (js/Date.))}))
+
+(defn poll! [run-id deadline transport]
+  (let [s (transport ["itonami" "run-status" "--run" run-id])]
+    (cond
+      (= "completed" (:status s)) (js/Promise.resolve s)
+      (and (#{"started" "running"} (:status s)) (< (.now js/Date) deadline))
+      (-> (js/Promise. (fn [resolve _] (js/setTimeout resolve 2000)))
+          (.then (fn [_] (poll! run-id deadline transport))))
+      :else (js/Promise.reject (js/Error. (str "Native story run stopped: " (:status s)))))))
+
+(defn validate! [request hour past]
+  (let [c (config) health (cli! ["status"])]
+    (when-not (native-health? c health) (throw (js/Error. "Native Itonami resident unavailable")))
+    (let [input (str "ツールは使わず、画像も公開も行わず、次のストーリー場面の連続性を確認してください。"
+                     "人物は架空の32歳の葵、全身を衣服で覆った港町の旅です。"
+                     "各エピソードは到着、発見、旅、解決の順です。"
+                     "回答はJSONだけ: {\"approved\":trueまたはfalse,\"hour\":指定のhour,"
+                     "\"story_id\":指定のstory_id,\"index\":指定のindex,\"reason\":短い理由}。"
+                     (js/JSON.stringify (clj->js {:hour hour :candidate (:story request)
+                                                 :published (mapv #(select-keys (:story %) [:index :episode :id :story_id :text])
+                                                                  (take-last 8 (sort-by :hour (filter story/published? past))))})))
+          started (cli! ["itonami" "run" "--profile" (:bot_id c) "--input" input])]
+      (when-not (seq (:run_id started)) (throw (js/Error. "Native story run was not accepted")))
+      (-> (poll! (:run_id started) (+ (.now js/Date) 240000) cli!)
+          (.then (fn [status]
+                   (verified-receipt c request hour status
+                                     (cli! ["bots" "messages" "--id" (:bot_id c)]))))))))

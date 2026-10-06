@@ -1,0 +1,24 @@
+(ns producer-native-story-test
+  (:require [producer-native-story :as n] [producer-story :as story]
+            [cljs.test :as t :refer [deftest is run-tests]]))
+(def c {:bot_id "producer-a" :store "owner-store"})
+(def r (story/request [] "20261006T13Z"))
+(def verdict {:approved true :hour "20261006T13Z" :story_id "aoi-harbor" :index 0 :reason "arrival begins the episode"})
+(def status {:status "completed" :session_id "producer-a" :run_id "native-run" :output (js/JSON.stringify (clj->js verdict))})
+(def detail {:turn {:id "native-run" :state "completed" :provider "murakumo" :model "mishima" :tool-count 0}})
+(deftest native-resident-required
+  (is (n/native-health? c {:answering? true :health {:service "cloud-itonami-app" :store "owner-store"}}))
+  (is (not (n/native-health? c {:answering? true :health {:service "signin-server" :store "owner-store"}})))
+  (is (not (n/native-health? c {:answering? true :health {:service "cloud-itonami-app" :store "other"}}))))
+(deftest terminal-native-story-proof
+  (is (= "native-run" (:run_id (n/verified-receipt c r "20261006T13Z" status detail))))
+  (doseq [bad [(assoc status :session_id "other") (assoc status :status "failed")
+               (assoc status :output "unstructured text")
+               (assoc status :output (js/JSON.stringify (clj->js (assoc verdict :index 1))))
+               (assoc status :output (js/JSON.stringify (clj->js (assoc verdict :approved false))))]]
+    (is (thrown? js/Error (n/verified-receipt c r "20261006T13Z" bad detail))))
+  (doseq [[field value] [[:provider "openrouter"] [:model "other"] [:id "other-run"] [:state "failed"] [:tool-count 1]]]
+    (is (thrown? js/Error (n/verified-receipt c r "20261006T13Z" status (assoc-in detail [:turn field] value))))))
+(defmethod t/report [:cljs.test/default :end-run-tests] [m]
+  (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
+(run-tests)
