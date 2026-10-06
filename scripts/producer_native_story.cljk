@@ -9,6 +9,9 @@
   (let [env (js/Object.assign #js {} (.-env js/process))]
     (js-delete env "NBB_CLJK_ROOTS")
     (js-delete env "CLOUD_ITONAMI_MCP_SESSION")
+    (js-delete env "CLOUD_ITONAMI_ENROLLMENT_KEY")
+    (when-let [data-dir (:data_dir (config))]
+      (aset env "CLOUD_ITONAMI_DATA_DIR" data-dir))
     (aset env "CLOUD_ITONAMI_AUTH_KIND" "agent")
     (aset env "CLOUD_ITONAMI_API_URL" "http://127.0.0.1:1338")
     (io/read-json-string
