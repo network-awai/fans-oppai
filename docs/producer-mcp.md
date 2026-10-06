@@ -105,3 +105,9 @@ Automated visual review is currently held: mishima timed out / no_ready_capacity
 ### Murakumo-only policy
 
 The owner explicitly forbids OpenRouter (2026-10-06). Producer provider, auxiliary calls and disabled MoA references are pinned to Murakumo mishima; only the Murakumo provider is configured and fallback is empty. Do not use murakumo/free: its catalog advertises external OpenRouter routing. The current catalog exposes mishima as text-only and no qualified visual model. Visual review remains held, no-agent submission/polling continues, and unreviewed images cannot publish. A Murakumo-native vision model must pass real image review before unattended publication resumes. This is not a request for external-provider approval.
+
+## Owned native vision and one-pass runner
+
+`producer_review {hour}` reviews the saved adult story PNG through the fixed Murakumo `qwen3-vl-2b-instruct` model. A full JSON decision and eight checks must agree; incomplete or contradictory replies stop publication. The image hash, model revision, owner node and durable job ID are saved with the review. This is a conservative model gate, not measured face identity or a guarantee of classifier accuracy.
+
+`producer_run {}` (or `kbb --backend sci --classpath scripts:src scripts/producer_run.cljk`) resumes the oldest pending receipt, boundedly polls accepted generation, calls the same review/publish/verify MCP tools, and compares the public PNG hash. No external/free-alias provider is allowed. Browser rendering is separate; the runner leaves state deployed. The Hermes profile runs this deterministic no-agent pipeline hourly, not a native Itonami Bot.

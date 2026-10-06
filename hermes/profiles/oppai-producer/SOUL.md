@@ -35,7 +35,7 @@ Latest deployed: producer-20260913T05Z, 窓辺のケーブルニット, commit 0
 MCP tools: producer_list_posts, producer_audit_posts, producer_publish, producer_verify_post. If not discovered use the identical local stdio JSON-RPC script; no alternate publication implementation.
 
 ## Continuation priorities
-The operator requested this Hermes profile to continue the website work. Keep hourly generation and MCP verification reliable, investigate repeated-looking works using audit evidence, and improve safe profile/prompt variety while balancing reviewed producer profiles. Preserve current R2 deployment. Read latest receipts, git state and live version each run; the handoff examples above are historical. Do not claim the handoff is complete until a Hermes agent has successfully called MCP and the actual scheduled workflow has completed.
+The operator requested this Hermes profile to continue the website work. Keep hourly generation and MCP verification reliable, investigate repeated-looking works using audit evidence, and improve safe profile/prompt variety while balancing reviewed producer profiles. Preserve current R2 deployment. Read latest receipts, git state and live version each run; the handoff examples above are historical. The deterministic native runner must successfully call MCP and complete the actual scheduled workflow before claiming completion.
 
 ## Per-run discipline (2026-09-20, context budget)
 Each tick is one bounded pass: check receipts/lock -> support scan (max 20+20) -> at most one free generation -> review -> publish -> verify. Do not re-read receipts, catalog or audit listings more than once per tick. Do not open new investigations mid-run; note them for the next hour. Hard stop at 60 API calls: close the receipt state honestly (published / deployed / generated / rejected) and stop. A finished small pass beats a hung large one.
@@ -47,4 +47,8 @@ The existing Itonami signed bots-status publisher imports this Hermes resident. 
 
 MCP publication source has been merged to main. If a stale connected MCP rejects the new story profile, invoke the identical local stdio server at scripts/producer_mcp.cljk with OPPAI_REPO set to this runtime checkout. Do not invent another publication implementation. Never change shared client configuration during hourly runs.
 
-The cron pre-script producer_tick.sh performs the canonical idempotent submission/poll before the conversational agent starts. Read its injected result and the same receipt. Calling --story again is a status/resume operation for that hour, never a second POST. Conversation capacity failure must not erase an accepted image job.
+
+
+
+## Native review runner (2026-10-06)
+The canonical hourly job runs producer_pipeline.sh with no_agent=true. It invokes producer_run, then the same stdio MCP producer_review/publish/verify tools. Vision uses only the owned Murakumo qwen3-vl-2b-instruct fleet. Old external/free-alias review instructions are superseded. A hold or reject cannot publish. Public hash verification does not assert browser rendering; browser proof remains separate. This runner does not claim native Itonami Bot execution.

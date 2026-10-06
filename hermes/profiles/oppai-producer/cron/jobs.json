@@ -16,7 +16,7 @@
         "expr": "55 * * * *",
         "display": "55 * * * *"
       },
-      "script": "producer_tick.sh",
+      "script": "producer_pipeline.sh",
       "skill": null,
       "skills": [],
       "workdir": "/Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai"
