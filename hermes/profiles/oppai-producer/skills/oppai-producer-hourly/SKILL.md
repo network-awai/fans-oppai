@@ -5,7 +5,7 @@ description: Run the bounded hourly story Producer with owned Murakumo GPU revie
 
 # Hourly story production
 
-Runtime: `/Users/junkawasaki/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai`.
+Runtime: `~/github/.oppai-producer-runtime/orgs/network-awai/fans-oppai`.
 Receipts: `~/.local/state/oppai-producer/<YYYYMMDDTHHZ>/receipt.json`.
 
 The scheduled `producer_pipeline.sh` calls `scripts/producer_run.cljk`. The same operation is available as stdio MCP `producer_run`. This is a deterministic Hermes no-agent job, not a conversational agent or native Itonami bot.
