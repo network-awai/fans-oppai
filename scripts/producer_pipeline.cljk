@@ -36,15 +36,28 @@
     (when-not (and (= 1 (count versions)) (= 100 (:percentage (first versions))))
       (throw (js/Error. "A single active deployment is required")))
     (:version_id (first versions))))
+(defn public-image-bytes!
+  ([hour] (public-image-bytes! hour 0 js/fetch))
+  ([hour attempt transport]
+   (pub/receipt-path hour)
+   (-> (transport (str "https://oppai.fans/img/producer-" hour ".png")
+                  #js {:redirect "error" :headers #js {"user-agent" io/user-agent}
+                       :signal (.timeout js/AbortSignal 30000)})
+       (.then (fn [res]
+                (cond
+                  (.-ok res) (.arrayBuffer res)
+                  ;; GET only: tolerate bounded asset propagation, never retry
+                  ;; POST, authentication failures, redirects or hash mismatches.
+                  (and (< attempt 2) (#{404 503} (.-status res)))
+                  (-> (js/Promise. (fn [resolve _] (js/setTimeout resolve 1000)))
+                      (.then (fn [_] (public-image-bytes! hour (inc attempt) transport))))
+                  :else (throw (js/Error. (str "Public PNG HTTP " (.-status res))))))))))
 (defn verify-public! [repo hour]
   (let [verified (mcp! repo "producer_verify_post" {:hour hour})
         rp (pub/receipt-path hour) r (io/read-json rp)]
     (when-not (every? true? (vals (:checks verified)))
       (throw (js/Error. "MCP deployment verification failed")))
-    (-> (js/fetch (str "https://oppai.fans/img/producer-" hour ".png")
-                  #js {:redirect "error" :headers #js {"user-agent" io/user-agent}
-                       :signal (.timeout js/AbortSignal 30000)})
-        (.then (fn [res] (when-not (.-ok res) (throw (js/Error. "Public PNG unavailable"))) (.arrayBuffer res)))
+    (-> (public-image-bytes! hour)
         (.then (fn [bytes]
                  (when-not (= (:sha256 r) (pub/sha (js/Buffer.from bytes)))
                    (throw (js/Error. "Public PNG hash mismatch")))
