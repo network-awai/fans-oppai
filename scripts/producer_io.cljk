@@ -3,6 +3,7 @@
   (:require ["fs" :as fs] ["path" :as path] ["child_process" :as cp]))
 
 (def user-agent "OppaiProducer/1.0 (+https://oppai.fans/#producer)")
+(defn read-json-string [s] (js->clj (js/JSON.parse s) :keywordize-keys true))
 (defn read-json [p] (js->clj (js/JSON.parse (fs/readFileSync p "utf8")) :keywordize-keys true))
 (defn save! [p value]
   (fs/writeFileSync (str p ".tmp") (js/JSON.stringify (clj->js value) nil 2) #js {:mode 384})

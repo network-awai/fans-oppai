@@ -1,9 +1,15 @@
 (ns producer-mcp
   "Local stdio MCP server, protocol 2025-11-25. No network listener or new credential."
-  (:require [producer-publish :as p] ["readline" :as rl]))
+  (:require [producer-publish :as p] [producer-io :as io] ["readline" :as rl]))
 (def ready (atom false))
 (def tool-list
-  [{:name "producer_audit_posts"
+  [{:name "producer_review" :description "Review a saved adult story PNG on the owned Murakumo native vision fleet; hold/reject cannot publish. Saves hash-bound structured evidence."
+    :inputSchema {:type "object" :properties {:hour {:type "string" :pattern "^[0-9]{8}T[0-9]{2}Z$"}} :required ["hour"] :additionalProperties false}
+    :annotations {:readOnlyHint false :destructiveHint false :openWorldHint true}}
+   {:name "producer_run" :description "Run one bounded story generation, native review and MCP publication pass. Resumes accepted UUIDs; leaves browser verification separate."
+    :inputSchema {:type "object" :properties {} :additionalProperties false}
+    :annotations {:readOnlyHint false :destructiveHint false :openWorldHint true}}
+   {:name "producer_audit_posts"
     :description "Audit latest hourly posts: actual image SHA256 duplicates, catalog hash mismatches, identical prompts and repeated prompt phrases. Read-only local Git evidence, not visual similarity or live browser verification."
     :inputSchema {:type "object" :properties {:limit {:type "integer" :minimum 1 :maximum 100 :default 20}} :additionalProperties false}
     :annotations {:readOnlyHint true}}
@@ -29,7 +35,7 @@
          :result (case method
                    "initialize" (do (reset! ready true)
                                     {:protocolVersion "2025-11-25" :capabilities {:tools {}}
-                                     :serverInfo {:name "oppai-producer" :version "1.0.0"}})
+                                     :serverInfo {:name "oppai-producer" :version "1.1.0"}})
                    "ping" {}
                    (do
                      (when-not @ready (throw (js/Error. "Initialize first")))
@@ -41,6 +47,11 @@
                                result (case (get-in m [:params :name])
                                         "producer_audit_posts" (p/audit! (or (.-OPPAI_REPO js/process.env) (.cwd js/process)) (if (contains? a :limit) (:limit a) 20))
                                         "producer_list_posts" (p/pending)
+                                        "producer_review" (do (p/receipt-path (:hour a))
+                                                            (io/read-json-string (p/command (or (.-OPPAI_REPO js/process.env) (.cwd js/process))
+                                                                 ["/opt/homebrew/bin/kbb" "--backend" "sci" "--classpath" "scripts:src" "scripts/producer_review_cli.cljk" (:hour a)])))
+                                        "producer_run" (io/read-json-string (p/command (or (.-OPPAI_REPO js/process.env) (.cwd js/process))
+                                                                 ["/opt/homebrew/bin/kbb" "--backend" "sci" "--classpath" "scripts:src" "scripts/producer_run.cljk"]))
                                         "producer_verify_post" (p/verify! (or (.-OPPAI_REPO js/process.env) (.cwd js/process)) (:hour a))
                                         "producer_publish" (p/publish! (or (.-OPPAI_REPO js/process.env) (.cwd js/process))
                                                                                (:hour a) (:sha256 a) (:expected_version a))

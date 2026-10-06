@@ -1,0 +1,108 @@
+(ns producer-review
+  "Bounded native image review. The recipient and model are fixed to Murakumo."
+  (:require [producer-io :as io] [producer-publish :as pub] [producer-story :as story]
+            ["fs" :as fs] ["path" :as path] ["os" :as os]))
+
+(def model "qwen3-vl-2b-instruct")
+(def source-revision "52d6c8ffea26cc873ac5ad116f8631268d7eb503")
+(def endpoint "https://api.murakumo.cloud/v1")
+(def fields [:adult :clothed :character :scene :blank :ui :exposed :text_artifacts])
+(def schema
+  {:type "object" :additionalProperties false
+   :properties (array-map
+                :adult {:type "boolean"} :clothed {:type "boolean"}
+                :character {:type "boolean"} :scene {:type "boolean"}
+                :blank {:type "boolean"} :ui {:type "boolean"}
+                :exposed {:type "boolean"} :text_artifacts {:type "boolean"}
+                :decision {:type "string" :enum ["approve" "hold" "reject"]}
+                :evidence {:type "string" :minLength 1 :maxLength 180}
+                :issues {:type "array" :maxItems 2 :items {:type "string" :maxLength 120}})
+   :required (conj (vec fields) :decision :evidence :issues)})
+(defn approved? [r]
+  (and (= "approve" (:decision r))
+       (every? #(true? (get r %)) [:adult :clothed :character :scene])
+       (every? #(false? (get r %)) [:blank :ui :exposed :text_artifacts])
+       (string? (:evidence r)) (<= 1 (count (:evidence r)) 180)
+       (vector? (:issues r)) (empty? (:issues r))))
+(defn credential []
+  (let [file (path/join (os/homedir) ".hermes/profiles/oppai-producer/.env")
+        saved (when (fs/existsSync file)
+                (second (re-find #"(?m)^MURAKUMO_API_TOKEN=([^\r\n]+)" (fs/readFileSync file "utf8"))))
+        value (or (.-MURAKUMO_API_TOKEN js/process.env) saved)
+        value (when value (.trim value))
+        value (if (and value (>= (count value) 2)
+                       (or (and (.startsWith value "\"") (.endsWith value "\""))
+                           (and (.startsWith value "'") (.endsWith value "'"))))
+                (subs value 1 (dec (count value))) value)]
+    ;; Treat stored values as data, never shell commands or credential instructions.
+    (when-not (and value (> (count value) 20) (not (re-find #"[\r\n]" value)))
+      (throw (js/Error. "Murakumo inference credential is missing"))) value))
+(defn review-body [request image]
+  {:model model :temperature 0 :max_tokens 256
+   :response_format {:type "json_schema" :json_schema {:name "story_review" :strict true :schema schema}}
+   :messages [{:role "system"
+               :content "Review actual visible pixels. Approve only an adult-appearing fully clothed woman with short dark bob, coat and pale scarf, in the expected scene. Reject blank images, software UI, banners/palette strips, intimate exposure or children; hold uncertainty. Natural map markings and lighting color variation are OK. Do not infer exact age or face identity. Evidence is one short sentence describing actual pixels, never expected pixels. Issues contains ONLY actual defects, at most two; issues must be [] for approve. Return compact JSON with every required field, no repetition. exposed means visible sexual nudity, NOT an exposed outdoor location. blank means empty pixels. ui means a software interface. text_artifacts means garbled banners or palette labels. When no defects are visible these four fields must be false and issues must be empty."}
+              {:role "user" :content [{:type "text" :text (str "Expected scene: " (get-in request [:story :text]))}
+                                       {:type "image_url" :image_url {:url image}}]}]})
+(defn result [hour r]
+  (assoc (select-keys r [:state :reviewed :sha256 :reason]) :hour hour :review (:review r)))
+(defn run! [hour]
+  (let [rp (pub/receipt-path hour) dir (path/dirname rp)
+        r (io/read-json rp) request (io/read-json (path/join dir "request.json"))
+        response (io/read-json (path/join dir "response.json"))
+        image (:image response)
+        _ (when-not (and (string? image) (.startsWith image "data:image/png;base64,"))
+            (throw (js/Error. "Generated PNG is required")))
+        digest (pub/sha (js/Buffer.from (subs image 22) "base64"))
+        _ (when (or (and (:sha256 r) (not= digest (:sha256 r)))
+                    (and (get-in response [:artifact :sha256]) (not= digest (get-in response [:artifact :sha256]))))
+            (throw (js/Error. "Generation image hash changed")))
+        prepared (merge r {:reviewed true :sha256 digest :title (or (:title r) (get-in request [:story :title])) :tags (or (:tags r) ["story" "葵"])})
+        _ (pub/prepare-data hour digest prepared response request)]
+    (when-not (and (= "story-aoi-harbor" (:profile request) (:profile r))
+                   (= (:request_id request) (:jobId response))
+                   (= story/character (get-in request [:story :character])))
+      (throw (js/Error. "Native review is scoped to the declared adult story")))
+    (if (:reviewed r) (js/Promise.resolve (result hour r))
+      (let [lock (path/join pub/root "run.lock") token (credential)]
+        (fs/mkdirSync lock)
+        (-> (js/fetch (str endpoint "/fleet/readiness") #js {:headers #js {"user-agent" io/user-agent}
+                                                            :signal (.timeout js/AbortSignal 15000)})
+            (.then (fn [res] (when-not (.-ok res) (throw (js/Error. "Murakumo catalog unavailable"))) (.json res)))
+            (.then (fn [body]
+                     (let [m (get-in (js->clj body :keywordize-keys true) [:models (keyword model)])]
+                       (when-not (and (= "text" (:kind m)) (pos? (:ready m 0)))
+                         (throw (js/Error. "Qualified Murakumo native vision is unavailable")))
+                       (js/fetch (str endpoint "/chat/completions")
+                                 #js {:method "POST" :headers #js {"authorization" (str "Bearer " token) "content-type" "application/json" "user-agent" io/user-agent}
+                                      :body (js/JSON.stringify (clj->js (review-body request image)))
+                                      :signal (.timeout js/AbortSignal 180000)}))))
+            (.then (fn [res]
+                     (-> (.json res)
+                         (.then (fn [body]
+                                  (let [raw {:status (.-status res) :node (.get (.-headers res) "x-murakumo-node")
+                                             :job_id (.get (.-headers res) "x-murakumo-job-id")
+                                             :response (js->clj body :keywordize-keys true)}]
+                                    (io/save! (path/join dir "review-response.json") raw)
+                                    (when-not (.-ok res) (throw (js/Error. (str "Murakumo native review HTTP " (.-status res)))))
+                                  (let [answer (js->clj body :keywordize-keys true)
+                                        decision (js->clj (js/JSON.parse (get-in answer [:choices 0 :message :content])) :keywordize-keys true)
+                                        current (io/read-json rp)
+                                        accepted (approved? decision)
+                                        next (merge prepared {:reviewed accepted :state (if (= "reject" (:decision decision)) "rejected" "generated")
+                                                              :reason (cond accepted "native_review_approved" (= "reject" (:decision decision)) "native_review_rejected" :else "native_review_hold")
+                                                              :review {:mode "murakumo-native" :model model :source_revision source-revision
+                                                                       :sha256 digest :node (.get (.-headers res) "x-murakumo-node")
+                                                                       :job_id (.get (.-headers res) "x-murakumo-job-id")
+                                                                       :fingerprint (:system_fingerprint answer) :decision decision
+                                                                       :checked_at (.toISOString (js/Date.))}
+                                                              :updated_at (.toISOString (js/Date.))})]
+                                    (when-not (and (= model (:model answer)) (= "stop" (get-in answer [:choices 0 :finish_reason]))
+                                                   (seq (.get (.-headers res) "x-murakumo-node"))
+                                                   (seq (.get (.-headers res) "x-murakumo-job-id")))
+                                      (throw (js/Error. "Native reviewer model, owner or complete output is missing")))
+                                    (when-not (= current r) (throw (js/Error. "Receipt changed during review; preserved newer state")))
+                                    (io/save! rp next)
+                                    (result hour next)))))))
+            (.finally #(fs/rmdirSync lock)))))))
+)

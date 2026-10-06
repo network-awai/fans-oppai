@@ -26,8 +26,8 @@
                             #js {:input input :encoding "utf8"})
         lines (.split (.trim out) "\n")]
     (is (= 2 (count lines)))
-    (is (= "producer_publish" (get-in (js->clj (js/JSON.parse (aget lines 1)) :keywordize-keys true)
-                                          [:result :tools 2 :name])))))
+    (is (some #(= "producer_publish" (:name %))
+              (get-in (js->clj (js/JSON.parse (aget lines 1)) :keywordize-keys true) [:result :tools])))))
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
 (deftest verify-deployment

@@ -1,0 +1,31 @@
+(ns producer-review-test
+  (:require [producer-review :as r] [producer-pipeline :as pipeline]
+            [cljs.test :as t :refer [deftest is run-tests]]))
+(def good {:adult true :clothed true :character true :scene true
+           :blank false :ui false :exposed false :text_artifacts false
+           :decision "approve" :evidence "A clothed woman reads a map beside a fountain." :issues []})
+(deftest fail-closed-structured-review
+  (is (r/approved? good))
+  (doseq [field [:adult :clothed :character :scene]]
+    (is (not (r/approved? (assoc good field false))))
+    (is (not (r/approved? (dissoc good field)))))
+  (doseq [field [:blank :ui :exposed :text_artifacts]]
+    (is (not (r/approved? (assoc good field true))))
+    (is (not (r/approved? (dissoc good field)))))
+  (doseq [bad [(assoc good :decision "hold") (assoc good :decision "reject")
+              (assoc good :issues ["scene missing"]) (assoc good :evidence "")
+              (assoc good :scene "true") (assoc good :issues nil)]]
+    (is (not (r/approved? bad)))))
+(deftest fixed-owned-endpoint-and-request
+  (let [b (r/review-body {:story {:text "harbor fountain"}} "data:image/png;base64,AA==")]
+    (is (= "qwen3-vl-2b-instruct" (:model b)))
+    (is (= 256 (:max_tokens b)))
+    (is (= "https://api.murakumo.cloud/v1" r/endpoint))
+    (is (true? (get-in b [:response_format :json_schema :strict])))))
+(deftest invocation-clears-unrelated-origin-roots
+  (let [e (pipeline/environment "/owned/repo")]
+    (is (nil? (aget e "NBB_CLJK_ROOTS")))
+    (is (= "/owned/repo" (aget e "OPPAI_REPO")))))
+(defmethod t/report [:cljs.test/default :end-run-tests] [m]
+  (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
+(run-tests)

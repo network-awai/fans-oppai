@@ -34,14 +34,13 @@ providers:
       mishima:
         context_length: 131072
         max_tokens: 2048
-      nex-n2.5-mini-uncensored:
-        context_length: 65536
-        max_tokens: 8192
+      qwen3-vl-2b-instruct:
+        context_length: 4096
+        max_tokens: 512
     stale_timeout_seconds: 600
     request_timeout_seconds: 150
     extra_headers:
       HTTP-Referer: https://itonami.cloud
-      X-OpenRouter-Title: Itonami By KotobaLabs
       X-Title: Itonami By KotobaLabs
     key_env: MURAKUMO_API_TOKEN
 fallback_providers: []
@@ -52,7 +51,7 @@ auxiliary:
   free_only: true
   vision:
     provider: murakumo
-    model: mishima
+    model: qwen3-vl-2b-instruct
   compression:
     provider: murakumo
     model: mishima
@@ -78,6 +77,7 @@ auxiliary:
 plugins:
   enabled: []
 cron:
+  script_timeout_seconds: 1200
   max_parallel_jobs: 12
   bot_chat_delivery_timeout_seconds: 900
 _config_version: 45
@@ -95,6 +95,7 @@ mcp_servers:
     timeout: 600
 platform_toolsets:
   cron:
+  script_timeout_seconds: 1200
   - terminal
   - file
   - vision
