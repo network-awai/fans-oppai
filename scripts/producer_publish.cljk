@@ -1,6 +1,6 @@
 (ns producer-publish
   "Local operator publishing adapter. Only reviewed free-generation receipts."
-  (:require [cljs.reader :as reader] [producer-io :as io] [oppai.gen.producer-profiles :as profiles]
+  (:require [cljs.reader :as reader] [producer-io :as io] [producer-story :as story] [oppai.gen.producer-profiles :as profiles]
             ["fs" :as fs] ["path" :as path] ["os" :as os]
             ["crypto" :as crypto] ["child_process" :as cp]))
 
@@ -18,7 +18,7 @@
                      (when (fs/existsSync p)
                        (let [r (io/read-json p)]
                          (when (#{"generated" "deployed" "published"} (:state r))
-                           (assoc (select-keys r [:state :title :profile :model :sha256 :reviewed :url :version]) :hour name)))))))
+                           (assoc (select-keys r [:state :title :profile :model :sha256 :reviewed :url :version :story :job_id]) :hour name)))))))
                (js->clj (fs/readdirSync root))))))
 
 (defn prepare-data [hour expected-sha r response request]
@@ -28,7 +28,10 @@
                  (= (:model request) (:model response))
                  (= "public-examples-v1" (:publication_consent request))
                  (string? (:title r)) (<= 1 (count (:title r)) 160)
-                 (or (nil? (:profile r)) (profiles/by-id (:profile r)))
+                 (or (nil? (:profile r)) (profiles/by-id (:profile r))
+                     (and (= "story-aoi-harbor" (:profile r)) (= (:story r) (:story request))
+                          (= "aoi-harbor" (get-in r [:story :story_id]))
+                          (= story/character (get-in r [:story :character]))))
                  (string? (:image response))
                  (.startsWith (:image response) "data:image/png;base64,"))
     (throw (js/Error. "A reviewed, zero-price PNG receipt is required")))
@@ -43,7 +46,8 @@
                       :image (str "/img/" id ".png") :sha256 digest
                       :width (.readUInt32BE bytes 16) :height (.readUInt32BE bytes 20)
                       :tags (vec (:tags r))}
-               (:profile r) (assoc :profile (:profile r)))})))
+               (:profile r) (assoc :profile (:profile r))
+               (:story request) (assoc :story (:story request)))})))
 
 (defn command [repo argv]
   ;; Arguments never pass through a shell. Child output never contaminates MCP stdout.

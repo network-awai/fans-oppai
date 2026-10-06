@@ -65,3 +65,27 @@ Repeated phrases are evidence of prompt repetition, not a perceptual image
 similarity score. Live site caching, rendered cards and public image responses
 are not checked. Use `producer_verify_post` separately for deployment evidence.
 Restart/reconnect an already-running MCP client to discover the added tool.
+
+## Stateful story producer
+
+`kbb --backend sci --classpath scripts scripts/producer_tick.cljk --story` uses
+the existing shared hourly receipts and cross-process lock. Each accepted job
+has a durable UUID. `202` is waiting, not generation success. Later calls resume
+the same job by GET, even across UTC hours, without resubmitting or consuming
+another generation. Legacy uncertain requests without a UUID remain held for
+inspection. A 503 status read preserves the accepted job.
+
+`producer_story.cljk` declares the adult fictional character and ordered scenes.
+Story index advances only after a reviewed receipt has a deployed/published
+state, image hash, public URL and deployment version. Rejected, failed, waiting
+and merely generated scenes do not advance. The character description is stable;
+this is text conditioning, not a measured guarantee of identical face identity.
+Story metadata is retained in the receipt and public catalog. The publisher
+requires a matching request/receipt story and the known character declaration.
+
+The existing Hermes hourly producer performs visual review and guarded MCP
+publication. The separate legacy story-submit cron must be held when the
+canonical story producer takes over, avoiding independent direct ComfyUI work
+and separate completion ledgers. Hermes residents are represented in the
+existing Itonami bots status publisher; that status bridge is distinct from
+a native Itonami Bot execution service and must be verified separately.

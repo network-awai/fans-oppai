@@ -27,8 +27,37 @@
        (string? (:prompt r)) (<= 1 (count (:prompt r)) 2000)
        (= "public-examples-v1" (:publication_consent r))))
 
+(defn job-id? [id]
+  (and (string? id) (boolean (re-matches #"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}" id))))
+(defn result-state [status result request]
+  (cond
+    (and (= 200 status) (= 0 (:price result)) (= (:request_id request) (:jobId result)) (= (:model request) (:model result))
+         (string? (:image result)) (.startsWith (:image result) "data:image/png;base64,"))
+    {:state "generated" :price 0 :model (:model result)}
+    (and (#{200 202} status) (= 0 (:price result)) (= (:request_id request) (:jobId result))
+         (= (:model request) (:model result)) (#{"queued" "running"} (:status result)))
+    {:state "waiting" :job_id (:jobId result) :model (:model result) :price 0}
+    (and (= 200 status) (= (:request_id request) (:jobId result)) (= "failed" (:status result))) {:state "failed" :reason "job_failed"}
+    (#{400 403 429} status) {:state "skipped" :status status :reason "admission_rejected"}
+    :else {:state "uncertain" :status status :reason "inspect_response_before_retry"}))
+(defn resume! [receipt transport]
+  (let [r (read-json receipt) dir (path/dirname receipt) request (read-json (path/join dir "request.json"))
+        out (path/join dir "response.json")]
+    (if-not (job-id? (:request_id request))
+      (assoc r :receipt receipt)
+      (try
+        (let [status (transport "GET" (str "/api/free/image/jobs/" (:request_id request)) nil out)
+              result (read-json out)
+              next (result-state status result request)]
+          ;; A transient status read failure never discards an accepted job.
+          (save! receipt (merge r (if (#{"generated" "waiting" "failed"} (:state next)) next
+                                   {:poll_status status :reason "status_read_pending"})
+                                {:response out :updated_at (.toISOString (js/Date.))}))
+          (assoc (read-json receipt) :receipt receipt))
+        (catch :default _ (assoc r :receipt receipt :reason "status_read_pending"))))))
+
 (defn run! [root hour request transport]
-  (when-not (and (re-matches #"\d{8}T\d{2}Z" hour) (valid-request? request))
+  (when-not (and (re-matches #"\d{8}T\d{2}Z" hour) (valid-request? request) (job-id? (:request_id request)))
     (throw (js/Error. "Invalid hour or free request")))
   (fs/mkdirSync root #js {:recursive true :mode 448})
   (let [lock (path/join root "run.lock")]
@@ -39,11 +68,13 @@
             pending (some (fn [name]
                             (let [p (path/join root name "receipt.json")]
                               (when (and (fs/existsSync p)
-                                         (#{"submitting" "generated" "uncertain"} (:state (read-json p)))) p)))
+                                         (#{"submitting" "generated" "uncertain" "waiting"} (:state (read-json p)))) p)))
                           (js->clj (fs/readdirSync root)))]
         (cond
-          (fs/existsSync receipt) (assoc (read-json receipt) :receipt receipt)
-          pending {:state "pending" :receipt pending}
+          (fs/existsSync receipt) (if (#{"waiting" "submitting" "uncertain"} (:state (read-json receipt)))
+                                    (resume! receipt transport) (assoc (read-json receipt) :receipt receipt))
+          pending (if (#{"waiting" "submitting" "uncertain"} (:state (read-json pending)))
+                    (resume! pending transport) {:state "pending" :receipt pending})
           :else
           (do
             (fs/mkdirSync dir #js {:mode 448})
@@ -52,19 +83,15 @@
               (if-not (= 200 health)
                 (save! receipt {:state "skipped" :reason "health_failed" :status health})
                 (do
-                  (save! receipt {:state "submitting" :hour hour :profile (:profile request)})
+                  (save! receipt (merge {:state "submitting" :hour hour :created_at (.toISOString (js/Date.))} (select-keys request [:story :profile :request_id])))
                   (try
                     (let [out (path/join dir "response.json")
                           status (transport "POST" "/api/free/image" request out)
                           result (read-json out)]
                       (save! receipt
-                        (cond
-                          (and (= 200 status) (= 0 (:price result)) (string? (:image result)))
-                          {:state "generated" :hour hour :response out :price 0 :model (:model result)}
-                          (#{400 429} status) {:state "skipped" :status status :reason "admission_rejected"}
-                          :else {:state "uncertain" :status status :reason "inspect_response_before_retry"})))
+                        (result-state status result request)))
                     (catch :default _
                       (save! receipt {:state "uncertain" :reason "inspect_response_before_retry"}))))))
-            (save! receipt (assoc (read-json receipt) :hour hour :profile (:profile request)))
+            (save! receipt (merge (read-json receipt) (select-keys request [:story :profile :request_id]) {:hour hour}))
             (assoc (read-json receipt) :receipt receipt))))
       (finally (fs/rmdirSync lock)))))

@@ -1,0 +1,15 @@
+(ns producer-story-test
+ (:require [producer-story :as s] [cljs.test :as t :refer [deftest is run-tests]]))
+(deftest only-deployed-reviewed-scenes-advance
+ (let [base {:story {:index 0} :state "generated" :reviewed true}]
+  (is (= 0 (:index (s/next-scene [base]))))
+  (is (= 0 (:index (s/next-scene [(assoc base :state "rejected")]))))
+  (is (= 1 (:index (s/next-scene [(assoc base :state "deployed" :sha256 "hash" :version "v" :url "u")]))))))
+(deftest stable-identity-and-id
+ (let [a (s/request [] "20261006T08Z") b (s/request [] "20261006T08Z")]
+  (is (= a b))
+  (is (= 32 (get-in a [:story :character :age])))
+  (is (re-matches #"[a-f0-9-]{36}" (:request_id a)))
+  (is (= "aoi-harbor" (get-in a [:story :story_id])))))
+(defmethod t/report [:cljs.test/default :end-run-tests] [m] (set! (.-exitCode js/process) (if (t/successful? m) 0 1)))
+(run-tests)
