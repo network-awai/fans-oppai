@@ -123,3 +123,10 @@ mcp_servers:
     env:
       OPPAI_REPO: /private/tmp/fans-oppai-ui/orgs/network-awai/fans-oppai
     timeout: 600
+
+platform_toolsets:
+  cron:
+    - terminal
+    - file
+    - vision
+    - mcp-oppai-producer
