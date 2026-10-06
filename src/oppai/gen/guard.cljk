@@ -20,7 +20,7 @@
      camera when this site asked for it.
   3. **A challenge is one nonce, one window.** Issued at `t`, usable until
      `t + challenge-ttl-ms` inclusive — the boundary itself is inside the
-     window (CLAUDE.md 8 問 #5: a comparison without its boundary case is
+     window (AGENTS.md 8 問 #5: a comparison without its boundary case is
      unmeasured)."
   (:require [kotoba.lang.text :as str]))
 

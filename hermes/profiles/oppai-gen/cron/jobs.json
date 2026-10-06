@@ -10,7 +10,7 @@
       "model": "qwen3.8-flash-next-whitehacker",
       "name": "oppai-probe",
       "no_agent": true,
-      "prompt": "",
+      "prompt": "Run the oppai-gen public probe in Murakumo OCI sandboxes on two nodes. Record health, shell, model map, anonymous video gate, and bundle evidence in the profile ledger.",
       "provider": "kotoba",
       "schedule": {
         "kind": "cron",

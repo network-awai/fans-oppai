@@ -338,10 +338,15 @@
                        (forward! generation-upstream token
                                  {:method "POST" :body (js/JSON.stringify (clj->js body))})))))))))
 
-(defn- image-models! [env]
-  (with-token env
-    (fn [token]
-      (forward! (str generation-upstream "/image-models") token {}))))
+(defn- image-models! [_env]
+  (-> (js/fetch "https://api.murakumo.cloud/infer/image-models?site=oppai" #js {:signal (js/AbortSignal.timeout 10000)})
+      (.then (fn [r]
+               (-> (.json r)
+                   (.then (fn [raw]
+                            (let [capacity (js->clj raw :keywordize-keys true)]
+                              (json-response {:source "murakumo-fleet" :faceModes []
+                                              :models (vec (:models capacity))} (.-status r))))))))
+      (.catch (fn [_] (error-response "fleet_unavailable" "生成ノードを確認できません。" 503)))))
 
 ;; ---- health -----------------------------------------------------------------
 
@@ -358,28 +363,44 @@
             :upstream generation-upstream}}
    200))
 
+(defn- image-network-id! [request env]
+  (let [ip (.get (.-headers request) "cf-connecting-ip") secret (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")]
+    (if-not (and (seq ip) (seq secret) (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))
+      (js/Promise.reject (js/Error. "Image admission unavailable"))
+      (-> (.digest (.-subtle js/crypto) "SHA-256" (.encode (js/TextEncoder.) (str secret ":oppai-image-network-v1:" ip)))
+          (.then (fn [bytes] (apply str (map #(.padStart (.toString % 16) 2 "0") (js/Array.from (js/Uint8Array. bytes))))))))))
+
 (defn- free-image! [request env]
   (-> (.json request)
       (.then (fn [raw]
                (let [prompt (gobj/get raw "prompt") consent (gobj/get raw "publication_consent")
                      model (or (gobj/get raw "model") "animagine-xl-4.0")
-                     profile (get {"animagine-xl-4.0" "hokusai-preview" "waiREALMIX_v11" "waiREALMIX_v11"} model)]
+                     profile (when (and (string? model) (re-matches #"[A-Za-z0-9][A-Za-z0-9._-]{0,127}" model)) model)]
                  (if-not (and profile (string? prompt) (<= 1 (count (str/trim prompt)) 2000)
                               (= "public-examples-v1" consent))
                    (error-response "invalid_request" "公開前レビューへの同意と2000文字以内のプロンプトが必要です。" 400)
                    ;; No generation token and no billing identity on the free lane.
                    ;; The upstream retains its network/day quota and concurrency gate.
-                   (-> (feedback/network-id! request env)
+                   (-> (image-network-id! request env)
                        (.then (fn [network]
-                         (js/fetch "https://murakumo.cloud/api/v1/preview/generate"
+                         (js/fetch "https://api.murakumo.cloud/infer/image-jobs"
                              #js {:method "POST" :headers (clj->js
-                                  (cond-> {"content-type" "application/json" "x-preview-network" network}
+                                  (cond-> {"content-type" "application/json" "authorization" (str "Bearer " (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))}
                                     (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN")
                                     (assoc "x-preview-sponsor" (env-str env "OPPAI_PREVIEW_SPONSOR_TOKEN"))))
-                                  :signal (js/AbortSignal.timeout 120000)
+                                  :signal (js/AbortSignal.timeout 20000)
                                   :body (js/JSON.stringify #js {:model profile :prompt prompt
+                                                              :id (gobj/get raw "request_id") :network network :lane "oppai"
                                                               :publication_consent consent})}))))))))
       (.catch (fn [_] (error-response "free_unavailable" "無料生成を完了できませんでした。料金は発生しません。" 503)))))
+
+(defn- free-image-status! [request env path]
+  (-> (image-network-id! request env)
+      (.then (fn [network]
+               (js/fetch (str "https://api.murakumo.cloud/infer/image-jobs/" (subs path (count "/api/free/image/jobs/")) "?network=" network)
+                         #js {:headers (clj->js {"authorization" (str "Bearer " (env-str env "MURAKUMO_IMAGE_ADAPTER_TOKEN"))})
+                              :signal (js/AbortSignal.timeout 20000)})))
+      (.catch (fn [_] (error-response "free_unavailable" "生成状況の確認を再試行しています。" 503)))))
 
 (defn- free-video! [request env path]
   (let [suffix (subs path (count "/api/free/video"))]
@@ -440,6 +461,10 @@
 
           (or (= "/api/free/video" path) (str/starts-with? path "/api/free/video/"))
           (free-video! request env path)
+
+          (re-matches #"/api/free/image/jobs/[a-f0-9-]{36}" path)
+          (if (= "GET" method) (free-image-status! request env path)
+              (error-response "method_not_allowed" "GET only" 405))
 
           (= "/api/free/image" path)
           (if (= "POST" method) (free-image! request env)

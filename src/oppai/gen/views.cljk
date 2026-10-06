@@ -32,7 +32,7 @@
                     (str "モデル一覧を取得できませんでした（" error
                          "）。既知のモデルを表示しています。")]
          [:p {:class "oppai-note"}
-          "モデル一覧は生成ノードの ComfyUI が今この瞬間に持つチェックポイントです。"]))))
+          "実生成を検証して公開されたMurakumoの共通モデル一覧です。空いているGPUへ自動で割り当てます。"]))))
 
 ;; ---- chat -------------------------------------------------------------------
 
@@ -170,15 +170,14 @@
         [:div {:class "oppai-form"}
          [:div {:class "oppai-note"}
           [:strong "基本の画像生成は無料"]
-          [:p "Animagine XL 4.0 / waiREALMIX_v11 · 768×768 · このサイト経由で各モデル1日24回（同じネットワーク単位）。混雑時は時間をおいてお試しください。"]]
+          [:p "このサイト経由で各モデル1日24回（同じネットワーク単位）。GPUで生成します。混雑時は時間をおいてお試しください。"]]
          (dds-checkbox "image-free" "無料で生成する" free? busy?
                        #(rf/dispatch [:image/set :free? (.. % -target -checked)]))
          (when free?
            (ui/field {:label "無料モデル" :for "free-image-model"}
                      (ui/select {:id "free-image-model" :value model :disabled busy?
                                  :class "oppai-full" :on-change (set-str :model)}
-                                [["animagine-xl-4.0" "Animagine XL 4.0"]
-                                 ["waiREALMIX_v11" "waiREALMIX_v11"]])))
+                                (mapv (fn [m] [(:model-id m) (:label m)]) models))))
          (when-not free? (preset-row))
          (ui/field {:label "プロンプト" :for "image-prompt"
                     :support (if (= :tags (:prompt-style card))
@@ -192,7 +191,7 @@
          (when-not free? [:div
          [:div {:class "oppai-form-row"}
           (ui/field {:label "モデル" :for "image-model"
-                     :support (or (:tagline card) "生成ノードに実際に載っているチェックポイントです。")}
+                     :support (or (:tagline card) "Murakumoの共通カタログに公開されたモデルです。")}
                     (ui/select {:id "image-model" :value model :disabled busy?
                                 :class "oppai-full"
                                 :on-change (set-str :model)}
@@ -224,7 +223,13 @@
           (when busy?
             [:span {:class "oppai-inline-status"}
              (ui/progress {:label "生成中"})
-             [:span (if (= :queued (:job/status job)) "順番待ち…" "1〜2分ほどかかります（初回はモデル読込で最大 6 分）")]])]
+             [:span (if free?
+                       (case (get-in image [:fleet-progress :status])
+                         "queued" "空いている生成ノードを待っています。"
+                         "reconnecting" "生成状況を確認しています。ページを開き直しても再開できます。"
+                         "running" (str "生成中 · " (get-in image [:fleet-progress :worker]) " · 数分〜20分ほどかかります。")
+                         "受付中…")
+                       (if (= :queued (:job/status job)) "順番待ち…" "生成中…"))]])]
          (fleet-note)]
         (when (and job busy?)
           [:div {:class "oppai-job"}
@@ -591,7 +596,7 @@
        [:div [:h2 "Producer " [:small {:class "oppai-note"} "BOT"]]
         [:p {:class "oppai-note"} "@producer · AI Image Producer"]]]
       [:p (:bio catalog/producer)]
-      [:p {:class "oppai-note"} "1時間ごとに新作を制作。画像を確認して公開します。無料枠や混雑状況により投稿を見送る場合があります。"]
+      [:p {:class "oppai-note"} "架空の成人・葵の旅を、場面を引き継いで制作します。1時間ごとに制作状況を確認し、完成した画像をレビューして公開します。"]
       [:div {:class "oppai-tools-grid"}
        (for [{:keys [id label model description]} (:briefs catalog/producer)]
          ^{:key id} [:article {:class "oppai-tool-card"}
@@ -661,7 +666,12 @@
            [:a {:href "#posts"} "‹ 投稿一覧"]
            [:h2 (:title work)]
            [:p (if (:producer work) [:a {:href "#producer"} "✦ Producer · BOT"] "oppai.fans Studio")]
-           [:p {:class "oppai-note"} "AI生成作品 · 768 × 768"]
+           [:p {:class "oppai-note"} (str "AI生成作品" (when (and (:width work) (:height work)) (str " · " (:width work) " × " (:height work))))]
+           (when-let [story (:story work)]
+             [:section {:aria-label "ストーリー"}
+              [:h3 "葵の港町の旅"]
+              [:p (str "第" (:episode story) "話 · 場面" (inc (mod (:index story) 4)) " · " (get-in story [:character :name]) "（" (get-in story [:character :age]) "歳）")]
+              [:p "港町への到着から、地図の発見、灯台への旅、その先の眺めへ。"]])
            (when (seq (:tags work))
              [:div {:class "oppai-work-tags" :aria-label "制作タグ"}
               (for [tag (:tags work)] ^{:key tag} [:span tag])])
