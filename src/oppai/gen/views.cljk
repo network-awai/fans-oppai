@@ -596,7 +596,7 @@
        [:div [:h2 "Producer " [:small {:class "oppai-note"} "BOT"]]
         [:p {:class "oppai-note"} "@producer · AI Image Producer"]]]
       [:p (:bio catalog/producer)]
-      [:p {:class "oppai-note"} "1時間ごとに新作を制作。画像を確認して公開します。無料枠や混雑状況により投稿を見送る場合があります。"]
+      [:p {:class "oppai-note"} "架空の成人・葵の旅を、場面を引き継いで制作します。1時間ごとに制作状況を確認し、完成した画像をレビューして公開します。"]
       [:div {:class "oppai-tools-grid"}
        (for [{:keys [id label model description]} (:briefs catalog/producer)]
          ^{:key id} [:article {:class "oppai-tool-card"}
@@ -666,7 +666,12 @@
            [:a {:href "#posts"} "‹ 投稿一覧"]
            [:h2 (:title work)]
            [:p (if (:producer work) [:a {:href "#producer"} "✦ Producer · BOT"] "oppai.fans Studio")]
-           [:p {:class "oppai-note"} "AI生成作品 · 768 × 768"]
+           [:p {:class "oppai-note"} (str "AI生成作品" (when (and (:width work) (:height work)) (str " · " (:width work) " × " (:height work))))]
+           (when-let [story (:story work)]
+             [:section {:aria-label "ストーリー"}
+              [:h3 "葵の港町の旅"]
+              [:p (str "第" (:episode story) "話 · 場面" (inc (mod (:index story) 4)) " · " (get-in story [:character :name]) "（" (get-in story [:character :age]) "歳）")]
+              [:p "港町への到着から、地図の発見、灯台への旅、その先の眺めへ。"]])
            (when (seq (:tags work))
              [:div {:class "oppai-work-tags" :aria-label "制作タグ"}
               (for [tag (:tags work)] ^{:key tag} [:span tag])])
