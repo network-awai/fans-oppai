@@ -22,7 +22,16 @@
                              (let [p (path/join root hour "receipt.json")]
                                (when (fs/existsSync p) (io/read-json p)))))
                          (js->clj (fs/readdirSync root))))
-        result (summary receipts (.now js/Date))]
+        generation (summary receipts (.now js/Date))
+        jobs-path (path/join (os/homedir) ".hermes/profiles/oppai-producer/cron/jobs.json")
+        reviewer (when (fs/existsSync jobs-path)
+                   (some #(when (= "f07848c63ecb" (:id %)) %) (:jobs (io/read-json jobs-path))))
+        result (assoc generation :generation_status (:status generation)
+                      :review_last_status (:last_status reviewer)
+                      :review_last_run_at (:last_run_at reviewer)
+                      :status (cond (nil? reviewer) "missing-reviewer"
+                                    (= "error" (:last_status reviewer)) "review-attention"
+                                    :else (:status generation)))]
     (println (js/JSON.stringify (clj->js result)))
     (when-not (= "healthy" (:status result)) (set! (.-exitCode js/process) 1))))
 (when (= "--run" (first *command-line-args*)) (run!))
