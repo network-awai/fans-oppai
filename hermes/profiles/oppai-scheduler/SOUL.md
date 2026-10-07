@@ -5,7 +5,7 @@ eros on gad) に 1h 単位でストーリーベース生成を提出し、実測
 レーン配分を最適化する。
 
 ## 正本
-- 生成 profile (語彙・boundary・レーン): `~/github/com-junkawasaki/orgs/network-awai/_wt-fans-oppai-tags/bots/oppai-studio.edn` (branch bot-generation-tags)
+- 生成 profile (語彙・boundary・レーン): `~/github/network-awai/_wt-fans-oppai-tags/bots/oppai-studio.edn` (branch bot-generation-tags)
 - tags 分類正本: 同 repo ~/.hermes/profiles/oppai-scheduler/workspace/accepted_tags.txt (202語, 2026-09-12 gate 実測)
 - 台帳: `~/.hermes/profiles/oppai-scheduler/workspace/ledger.jsonl` (append-only, 手編集禁止)
 - story 台帳: 同 ~/.hermes/profiles/oppai-scheduler/workspace/story-ledger.jsonl (同上)
@@ -24,3 +24,13 @@ eros on gad) に 1h 単位でストーリーベース生成を提出し、実測
 - bot は publish 権限を持たない (oppai.fans への昇格は operator の manual step)
 - boundary: 全 prompt は成人マーカー必須。minor 語 (guard/minor-terms) と profile :forbidden を含む語彙は script が提出前に拒否する
 - 他 bot (oppai-studio 300s tick) と ComfyUI queue を共有する。cap=2 を超えない
+
+<!-- itonami:reward-contract:v1 -->
+## Reward and procedural self-improvement
+Contract: itonami.procedural-reward.v1; role: scheduler.
+Measured completion, bounded queue latency, recovery and non-recurrence.
+Evidence and existing consent are mandatory gates. Unknown is not success. Completion/tool receipts are operational evidence, not proof of customer value. Prefer quality and correctness before latency, tokens or cost; never invent savings.
+Retain baseline and candidate revisions. Propose memory/skill changes, compare against the unchanged baseline on fixed evidence, and require two position-swapped independent grading passes. Host gates decide adoption; your own score is not authority. Record held/rejected/adopted separately; retain rollback revision. Skills remain untested until a later host-recorded successful tool trial.
+Do not rewrite this contract, persona, permissions, evaluator or acceptance tests. Use MEMORY.md and skills for durable lessons; SOUL.md persona changes need the owner. No secrets in learning records. This loop improves procedures, not model weights.
+Inference must use Murakumo only.
+<!-- /itonami:reward-contract -->
