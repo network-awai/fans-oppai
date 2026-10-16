@@ -295,7 +295,10 @@ skill `git-cleanup-conflict`。
   作業前に一時 worktree を切って、そこで完結させる:
 
   ```bash
-  git worktree add -B <session-branch> <path> origin/main   # 独立 working tree
+  if git show-ref --verify --quiet "refs/heads/<session-branch>"; then
+  echo "branch already exists; inspect it before choosing another name" >&2; exit 1
+fi
+git worktree add -b <session-branch> "$HOME/github/wt/<agent-or-bot>/<task>" origin/main   # 独立 working tree
   # ... <path> で編集 / commit / test ...
   git push origin <session-branch>
   gh api repos/<org>/<repo>/merges -f base=main -f head=<session-branch> \
@@ -303,7 +306,7 @@ skill `git-cleanup-conflict`。
   git worktree remove <path>                                 # 使い終わったら片付ける
   ```
 
-  **`<path>` は superproject ルートの外（例: scratchpad / `/tmp` 配下）にする。**
+  **`<path>` は superproject ルートの外にある `~/github/wt/<agent-or-bot>/<task>` を使う。**
   `.claude/worktrees/` 等 superproject 内側に worktree を作ると、west は `.west/`
   を親ディレクトリへ辿って発見するため topdir が superproject ルートのままになり、
   worktree 内で `west update` しても実際には共有の `orgs/` を操作してしまう
@@ -508,8 +511,8 @@ GitHub API の single-entry commit で tip に直接載せる方が確実。**�
 ローカルが遅れていても正しい base から始まる:
 
 ```bash
-git worktree add -b <branch> /tmp/root-<name> origin/main   # ✅ 分岐元が明示されている
-git worktree add -b <branch> /tmp/root-<name>               # ❌ 遅れたローカル HEAD から分岐する
+git worktree add -b <branch> "$HOME/github/wt/<agent-or-bot>/<task>" origin/main   # ✅ managed path + explicit base
+git worktree add -b <branch> "$HOME/github/wt/<agent-or-bot>/<task>"               # ❌ 遅れたローカル HEAD から分岐する
 ```
 
 **なぜ「分岐の瞬間」が特別なのか。** 遅れた base の上に積んだ commit は、後から同期しても
@@ -552,7 +555,7 @@ push 直前まで行われなかった。**警告を読むことと同期する�
   追えなくなる。stash を使ってよいのは「共有 checkout で見つけた他人の未コミット WIP を
   消さないための緊急退避」だけで、積んだら cleanup で必ず棚卸しする。
 - **着地後の後片付けまでがタスクの完了条件。** push → サーバ側マージ
-  （`gh api .../merges`）→ `git worktree remove` → `git branch -D <branch>` →
+  （`gh api .../merges`）→ `git worktree remove` → `git branch -d <branch>` →
   マージ済み remote branch の削除。「マージしたのに branch/worktree が残っている」
   状態を作らない。
 - **worktree モデルはディスクを理由に捨てない。捨てる理由になるのは「同時書き手が 1 人」だけ**
