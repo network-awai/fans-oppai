@@ -45,15 +45,20 @@ with `amu check --jvm-free` + `amu test --jvm-free` + a Node-side test script
 over the host artifacts, state the suite's JVM-boundness in the report, and
 leave the suite port as its own authorized wave (skill `kbb-test-suite-fix`).
 
-Landing flow for org repos (measured working path, all main-branch):
-clone to /tmp → write the guest → check + compile locally → commit to main →
-`git push origin main` → confirm remote HEAD with
-`gh api repos/<org>/<repo>/commits/main --jq .sha`. A repo checked out at a
-detached HEAD reports `src refspec main does not match any` on push —
-`git checkout -B main <verified-sha>` first. West checkouts name the remote
-per-org (`kotoba-lang`, `net-kotobase`), NOT `origin` — `git fetch origin`
-fails with "'origin' does not appear to be a git repository"; read
-`git remote -v` first and use the org-named remote for fetch/push.
+Landing flow for org repos: create a task worktree under
+`~/github/wt/oppai-scheduler/<task>` from the verified `origin/main` SHA →
+write the guest → check + compile locally → commit to `bot/oppai-*` → push
+that branch → use the reviewed server-side merge endpoint → confirm remote HEAD
+with `gh api repos/<org>/<repo>/commits/main --jq .sha`. A repo checked out at
+a detached HEAD reports `src refspec <branch> does not match any` on push.
+Create a new task branch from the verified base with
+`git switch --create bot/oppai-<task> <verified-sha>`; if that branch
+already exists, inspect it or choose another name rather than resetting it.
+Push only the task branch and use the reviewed server-side merge endpoint.
+West checkouts name the remote per-org (`kotoba-lang`, `net-kotobase`),
+NOT `origin` — `git fetch origin` fails with "'origin' does not appear to
+be a git repository"; read `git remote -v` first and use the org-named
+remote for fetch/push.
 
 ## Migration patterns
 
@@ -502,9 +507,9 @@ An adapter repo (e.g. kotoba-net) needs a `deps.edn` at its ROOT (`{:paths ["src
 
 ### Distinguish source repos from auto-generated worktrees
 
-- **Source repos live in `~/github/com-junkasaki/orgs/`, `~/.gftd/kotoba-lang/`, `~/.codex-worktrees/`, `~/.gitlibs/libs/`**. Migrate `.clj`/`.cljc` files in these locations.
+- **Source repos live in `~/github/com-junkawasaki/orgs/`, `~/.gftd/kotoba-lang/`, `~/.codex-worktrees/`, `~/.gitlibs/libs/`**. Migrate `.clj`/`.cljc` files in these locations.
 - **Auto-generated worktrees live in `~/.gftd/worktrees/`**. These are temporary/build artifacts (e.g., `kotoba-cli-build-bot/`, `kotoba-cli-build-verifier/`). **DO NOT migrate** `.clj`/`.cljc` files here — they will be regenerated.
-- **Identify target directories first**: `find ~/github/com-junkasaki/orgs -type f -name '*.clj'` vs `find ~/.gftd/worktrees -type f -name '*.clj'`.
+- **Identify target directories first**: `find ~/github/com-junkawasaki/orgs -type f -name '*.clj'` vs `find ~/.gftd/worktrees -type f -name '*.clj'`.
 
 ### File selection rules
 
@@ -532,7 +537,7 @@ verified.
 ### Migration pattern
 
 1. Identify target orgs (exclude `~/.gftd/worktrees/`)
-2. Convert files: `find . -type f \( -name '*.clj' -o -name '*.cljc' \) -exec sh -c 'cp "$1" "${1%.clj}.kotoba"' _ {} \;`
+2. Convert files: `find . -type f \( -name '*.clj' -o -name '*.cljc' \) -exec sh -c 'src="$1"; case "$src" in *.cljc) dst="${src%.cljc}.kotoba" ;; *.clj) dst="${src%.clj}.kotoba" ;; esac; cp "$src" "$dst"' _ {} \;`
 3. Keep same `ns` declaration in converted files
 4. Verify with `find . -type f -name '*.kotoba' | wc -l`
 
